@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.env.local
+uniflow-cd8c0-firebase-adminsdk-fbsvc-33e557f3c5 copy.json

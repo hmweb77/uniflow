@@ -1,0 +1,55 @@
+{
+    "common": {
+      "bookNow": "Book Now",
+      "price": "Price",
+      "date": "Date",
+      "time": "Time",
+      "language": "Language",
+      "loading": "Loading...",
+      "error": "An error occurred",
+      "success": "Success!",
+      "cancel": "Cancel",
+      "save": "Save",
+      "delete": "Delete",
+      "edit": "Edit",
+      "back": "Back",
+      "next": "Next",
+      "submit": "Submit"
+    },
+    "event": {
+      "title": "Event",
+      "description": "Description",
+      "dateAndTime": "Date & Time",
+      "onlineClass": "Online Class",
+      "spotsAvailable": "Spots available",
+      "soldOut": "Sold Out"
+    },
+    "registration": {
+      "title": "Registration",
+      "name": "First Name",
+      "surname": "Last Name",
+      "email": "Email",
+      "namePlaceholder": "Enter your first name",
+      "surnamePlaceholder": "Enter your last name",
+      "emailPlaceholder": "Enter your email",
+      "proceedToPayment": "Proceed to Payment",
+      "termsNotice": "By registering, you agree to receive event-related emails."
+    },
+    "success": {
+      "title": "Payment Successful!",
+      "message": "Thank you for your registration. You will receive a confirmation email shortly with the event details and access link.",
+      "checkEmail": "Please check your email inbox (and spam folder)."
+    },
+    "admin": {
+      "dashboard": "Dashboard",
+      "events": "Events",
+      "createEvent": "Create Event",
+      "attendees": "Attendees",
+      "totalRevenue": "Total Revenue",
+      "ticketsSold": "Tickets Sold",
+      "exportCsv": "Export CSV",
+      "sendEmail": "Send Email to All",
+      "noEvents": "No events yet. Create your first event!",
+      "noAttendees": "No attendees yet."
+    }
+  }

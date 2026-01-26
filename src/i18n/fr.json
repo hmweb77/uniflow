@@ -1,0 +1,55 @@
+{
+    "common": {
+      "bookNow": "Réserver",
+      "price": "Prix",
+      "date": "Date",
+      "time": "Heure",
+      "language": "Langue",
+      "loading": "Chargement...",
+      "error": "Une erreur s'est produite",
+      "success": "Succès !",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "edit": "Modifier",
+      "back": "Retour",
+      "next": "Suivant",
+      "submit": "Envoyer"
+    },
+    "event": {
+      "title": "Événement",
+      "description": "Description",
+      "dateAndTime": "Date & Heure",
+      "onlineClass": "Cours en ligne",
+      "spotsAvailable": "Places disponibles",
+      "soldOut": "Complet"
+    },
+    "registration": {
+      "title": "Inscription",
+      "name": "Prénom",
+      "surname": "Nom",
+      "email": "Email",
+      "namePlaceholder": "Entrez votre prénom",
+      "surnamePlaceholder": "Entrez votre nom",
+      "emailPlaceholder": "Entrez votre email",
+      "proceedToPayment": "Procéder au paiement",
+      "termsNotice": "En vous inscrivant, vous acceptez de recevoir des emails liés à l'événement."
+    },
+    "success": {
+      "title": "Paiement réussi !",
+      "message": "Merci pour votre inscription. Vous recevrez un email de confirmation avec les détails de l'événement et le lien d'accès.",
+      "checkEmail": "Veuillez vérifier votre boîte de réception (et les spams)."
+    },
+    "admin": {
+      "dashboard": "Tableau de bord",
+      "events": "Événements",
+      "createEvent": "Créer un événement",
+      "attendees": "Participants",
+      "totalRevenue": "Revenu total",
+      "ticketsSold": "Billets vendus",
+      "exportCsv": "Exporter CSV",
+      "sendEmail": "Envoyer un email à tous",
+      "noEvents": "Aucun événement. Créez votre premier événement !",
+      "noAttendees": "Aucun participant pour le moment."
+    }
+  }
