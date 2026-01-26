@@ -1,4 +1,4 @@
-// src/lib/stripe.js
+// src/app/lib/stripe.js
 
 import Stripe from 'stripe';
 
@@ -12,12 +12,20 @@ export async function createCheckoutSession({
   eventId,
   eventTitle,
   price,
+  ticketId,
+  ticketName,
   customerEmail,
   customerName,
   customerSurname,
   successUrl,
   cancelUrl,
+  locale = 'en',
 }) {
+  // Build product name with ticket type
+  const productName = ticketName && ticketName !== 'General Admission'
+    ? `${eventTitle} - ${ticketName}`
+    : eventTitle;
+
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
     mode: 'payment',
@@ -27,7 +35,7 @@ export async function createCheckoutSession({
         price_data: {
           currency: 'eur',
           product_data: {
-            name: eventTitle,
+            name: productName,
             description: `Registration for ${eventTitle}`,
           },
           unit_amount: Math.round(price * 100), // Convert to cents
@@ -37,19 +45,29 @@ export async function createCheckoutSession({
     ],
     metadata: {
       eventId,
-      customerName,
-      customerSurname,
+      ticketId: ticketId || 'default',
+      ticketName: ticketName || 'General Admission',
+      customerName: customerName || '',
+      customerSurname: customerSurname || '',
       customerEmail,
     },
     success_url: successUrl,
     cancel_url: cancelUrl,
-    locale: 'auto', // Auto-detect language
+    locale: locale === 'fr' ? 'fr' : 'auto',
     payment_intent_data: {
       metadata: {
         eventId,
-        customerName,
-        customerSurname,
+        ticketId: ticketId || 'default',
+        ticketName: ticketName || 'General Admission',
+        customerName: customerName || '',
+        customerSurname: customerSurname || '',
         customerEmail,
+      },
+    },
+    // Enable additional payment methods
+    payment_method_options: {
+      card: {
+        setup_future_usage: undefined,
       },
     },
   });

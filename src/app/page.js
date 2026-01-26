@@ -3,7 +3,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../app/lib/firebase';
 import Link from 'next/link';
 
@@ -20,21 +20,23 @@ export default function LandingPage() {
   const fetchPublicEvents = async () => {
     try {
       const eventsRef = collection(db, 'events');
-      const eventsQuery = query(
-        eventsRef,
-        orderBy('createdAt', 'desc'),
-        limit(6)
-      );
+      const eventsQuery = query(eventsRef, orderBy('date', 'asc'));
       const eventsSnap = await getDocs(eventsQuery);
       const eventsData = eventsSnap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-      // Filter out cancelled events client-side
-      const publishedEvents = eventsData.filter(
-        (event) => event.status !== 'cancelled'
-      );
-      setEvents(publishedEvents);
+      
+      // Filter: only upcoming events (date > now) and not cancelled
+      const now = new Date();
+      const upcomingEvents = eventsData.filter((event) => {
+        if (event.status === 'cancelled') return false;
+        const eventDate = parseDate(event.date);
+        return eventDate > now;
+      });
+      
+      // Take only the 3 soonest events
+      setEvents(upcomingEvents.slice(0, 3));
     } catch (error) {
       console.error('Error fetching events:', error);
       // Fallback: try without ordering if index doesn't exist
@@ -45,7 +47,18 @@ export default function LandingPage() {
           id: doc.id,
           ...doc.data(),
         }));
-        setEvents(eventsData);
+        
+        const now = new Date();
+        const upcomingEvents = eventsData
+          .filter((event) => {
+            if (event.status === 'cancelled') return false;
+            const eventDate = parseDate(event.date);
+            return eventDate > now;
+          })
+          .sort((a, b) => parseDate(a.date) - parseDate(b.date))
+          .slice(0, 3);
+        
+        setEvents(upcomingEvents);
       } catch (err) {
         console.error('Fallback query also failed:', err);
       }
@@ -54,21 +67,38 @@ export default function LandingPage() {
     }
   };
 
+  // Parse date from various formats
+  const parseDate = (timestamp) => {
+    if (!timestamp) return new Date(0);
+    if (timestamp instanceof Date) return timestamp;
+    if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+    if (timestamp._seconds) return new Date(timestamp._seconds * 1000);
+    return new Date(timestamp);
+  };
+
   const formatDate = (timestamp) => {
-    if (!timestamp) return '';
-    let date;
-    if (timestamp instanceof Date) {
-      date = timestamp;
-    } else if (timestamp && typeof timestamp.toDate === 'function') {
-      date = timestamp.toDate();
-    } else {
-      date = new Date(timestamp);
-    }
+    const date = parseDate(timestamp);
     return date.toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
+  };
+
+  const formatTime = (timestamp) => {
+    const date = parseDate(timestamp);
+    return date.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // Get lowest price from tickets or legacy price
+  const getLowestPrice = (event) => {
+    if (event.tickets && event.tickets.length > 0) {
+      return Math.min(...event.tickets.map((t) => t.price || 0));
+    }
+    return event.price || 0;
   };
 
   const features = [
@@ -82,26 +112,13 @@ export default function LandingPage() {
       title: 'Secure Payments',
       description: 'Powered by Stripe with support for cards, Apple Pay & Google Pay.',
     },
-    {
-      icon: '📧',
-      title: 'Automatic Confirmation',
-      description: 'Receive your ticket and class link instantly after payment.',
-    },
-    {
-      icon: '🌍',
-      title: 'Multi-language',
-      description: 'Events available in English and French for international students.',
-    },
+   
     {
       icon: '📱',
       title: 'Mobile Friendly',
       description: 'Register and access your classes from any device, anywhere.',
     },
-    {
-      icon: '🎓',
-      title: 'University Focused',
-      description: 'Built specifically for university students and educators.',
-    },
+  
   ];
 
   const steps = [
@@ -182,9 +199,9 @@ export default function LandingPage() {
               <span className="text-xl font-bold text-gray-900">Uniflow</span>
             </div>
             <div className="hidden md:flex items-center gap-8">
-              <a href="#events" className="text-gray-600 hover:text-gray-900 transition-colors">
+              <Link href="/events" className="text-gray-600 hover:text-gray-900 transition-colors">
                 Events
-              </a>
+              </Link>
               <a href="#how-it-works" className="text-gray-600 hover:text-gray-900 transition-colors">
                 How it Works
               </a>
@@ -237,12 +254,12 @@ export default function LandingPage() {
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-              <a
-                href="#events"
+              <Link
+                href="/events"
                 className="px-8 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all hover:shadow-lg hover:shadow-indigo-500/30 text-lg"
               >
-                Browse Events
-              </a>
+                See All Events
+              </Link>
               <a
                 href="#how-it-works"
                 className="px-8 py-4 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-lg"
@@ -275,46 +292,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Hero Image/Mockup */}
-          <div className="mt-16 relative max-w-4xl mx-auto">
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-1 shadow-2xl shadow-indigo-500/20">
-              <div className="bg-gray-900 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                </div>
-                <div className="bg-gray-800 rounded-lg p-6 text-center">
-                  <div className="text-6xl mb-4">🎓</div>
-                  <h3 className="text-white text-xl font-semibold mb-2">Your Event Dashboard</h3>
-                  <p className="text-gray-400">Create events, track sales, manage attendees</p>
-                </div>
-              </div>
-            </div>
-            {/* Floating elements */}
-            <div className="absolute -top-4 -left-4 bg-white rounded-xl shadow-lg p-4 hidden lg:block">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                  <span className="text-green-600">✓</span>
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">Payment received</p>
-                  <p className="text-sm text-gray-500">+29.99 €</p>
-                </div>
-              </div>
-            </div>
-            <div className="absolute -bottom-4 -right-4 bg-white rounded-xl shadow-lg p-4 hidden lg:block">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                  <span>📧</span>
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">Email sent</p>
-                  <p className="text-sm text-gray-500">Confirmation delivered</p>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -386,7 +363,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Events Section */}
+      {/* Upcoming Events Section */}
       <section id="events" className="py-20 px-4 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -394,7 +371,7 @@ export default function LandingPage() {
               Upcoming Events
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Discover and register for the latest online classes
+              Don&apos;t miss these upcoming online classes
             </p>
           </div>
 
@@ -403,68 +380,110 @@ export default function LandingPage() {
               <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
           ) : events.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {events.map((event) => (
-                <Link
-                  key={event.id}
-                  href={`/e/${event.slug}`}
-                  className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl hover:border-indigo-100 transition-all"
-                >
-                  {/* Event Banner */}
-                  <div className="h-48 bg-gradient-to-br from-indigo-400 to-purple-500 relative overflow-hidden">
-                    {event.bannerUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={event.bannerUrl}
-                        alt={event.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-6xl opacity-50">🎓</span>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+                {events.map((event) => {
+                  const price = getLowestPrice(event);
+                  const hasMultipleTickets = event.tickets && event.tickets.length > 1;
+                  
+                  return (
+                    <Link
+                      key={event.id}
+                      href={`/e/${event.slug}`}
+                      className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl hover:border-indigo-100 transition-all"
+                    >
+                      {/* Event Banner */}
+                      <div className="h-48 bg-gradient-to-br from-indigo-400 to-purple-500 relative overflow-hidden">
+                        {event.bannerUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={event.bannerUrl}
+                            alt={event.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <span className="text-6xl opacity-50">🎓</span>
+                          </div>
+                        )}
+                        {/* Price Badge */}
+                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full">
+                          {price === 0 ? (
+                            <span className="font-bold text-green-600">Free</span>
+                          ) : (
+                            <span className="font-bold text-gray-900">
+                              {hasMultipleTickets && 'From '}
+                              {price} €
+                            </span>
+                          )}
+                        </div>
+                        {/* Language Badge */}
+                        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-sm">
+                          {event.language === 'fr' ? '🇫🇷' : '🇬🇧'}
+                        </div>
                       </div>
-                    )}
-                    {/* Price Badge */}
-                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full">
-                      <span className="font-bold text-gray-900">{event.price} €</span>
-                    </div>
-                    {/* Language Badge */}
-                    <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-sm">
-                      {event.language === 'fr' ? '🇫🇷' : '🇬🇧'}
-                    </div>
-                  </div>
 
-                  {/* Event Info */}
-                  <div className="p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
-                      {event.title}
-                    </h3>
-                    <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                      <span className="flex items-center gap-1">
-                        📅 {formatDate(event.date)}
-                      </span>
-                    </div>
-                    <p className="text-gray-600 text-sm line-clamp-2 mb-4">
-                      {event.description || 'Join this amazing online class!'}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-indigo-600 font-medium group-hover:underline">
-                        Register Now →
-                      </span>
-                    </div>
-                  </div>
+                      {/* Event Info */}
+                      <div className="p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                          {event.title}
+                        </h3>
+                        
+                        {/* Organizer */}
+                        {event.organizer && (
+                          <p className="text-sm text-indigo-600 mb-2">
+                            👤 {event.organizer}
+                          </p>
+                        )}
+                        
+                        <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                          <span className="flex items-center gap-1">
+                            📅 {formatDate(event.date)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            🕐 {formatTime(event.date)}
+                          </span>
+                        </div>
+                        <p className="text-gray-600 text-sm line-clamp-2 mb-4">
+                          {event.description || 'Join this amazing online class!'}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-indigo-600 font-medium group-hover:underline">
+                            Register Now →
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+              
+              {/* See All Events Button */}
+              <div className="text-center">
+                <Link
+                  href="/events"
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all hover:shadow-lg hover:shadow-indigo-500/30 text-lg"
+                >
+                  See All Events
+                  <span>→</span>
                 </Link>
-              ))}
-            </div>
+              </div>
+            </>
           ) : (
             <div className="text-center py-12 bg-gray-50 rounded-2xl">
               <div className="text-6xl mb-4">📅</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 No upcoming events
               </h3>
-              <p className="text-gray-500">
+              <p className="text-gray-500 mb-6">
                 Check back soon for new classes!
               </p>
+              <Link
+                href="/events"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Browse All Events
+              </Link>
             </div>
           )}
         </div>
@@ -562,12 +581,12 @@ export default function LandingPage() {
             Browse our upcoming events and register for your next online class today.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a
-              href="#events"
+            <Link
+              href="/events"
               className="px-8 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-all hover:shadow-lg hover:shadow-indigo-500/30 text-lg"
             >
-              Browse Events
-            </a>
+              See All Events
+            </Link>
             <Link
               href="/login"
               className="px-8 py-4 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-lg"

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-import { formatEventDateTime, generateCSV, downloadCSV } from '../../../lib/utils';
+import { generateCSV, downloadCSV } from '../../../lib/utils';
 import Link from 'next/link';
 
 export default function EventDetailPage() {
@@ -20,6 +20,7 @@ export default function EventDetailPage() {
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [ticketFilter, setTicketFilter] = useState('all');
 
   useEffect(() => {
     if (eventId) {
@@ -30,13 +31,11 @@ export default function EventDetailPage() {
 
   const fetchEventData = async () => {
     try {
-      // Fetch event
       const eventDoc = await getDoc(doc(db, 'events', eventId));
       if (eventDoc.exists()) {
         setEvent({ id: eventDoc.id, ...eventDoc.data() });
       }
 
-      // Fetch attendees
       const attendeesRef = collection(db, 'attendees');
       const attendeesQuery = query(
         attendeesRef,
@@ -56,16 +55,43 @@ export default function EventDetailPage() {
     }
   };
 
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'No date';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // Filter attendees by ticket type
+  const filteredAttendees =
+    ticketFilter === 'all'
+      ? attendees
+      : attendees.filter((a) => a.ticketId === ticketFilter || a.ticketName === ticketFilter);
+
+  // Calculate revenue
+  const revenue = filteredAttendees.reduce((sum, a) => sum + (a.amountPaid || 0), 0);
+
+  // Get unique ticket types from attendees
+  const ticketTypes = [...new Set(attendees.map((a) => a.ticketName || 'General Admission'))];
+
   const handleExportCSV = () => {
     const headers = [
       { key: 'name', label: 'First Name' },
       { key: 'surname', label: 'Last Name' },
       { key: 'email', label: 'Email' },
+      { key: 'ticketName', label: 'Ticket Type' },
+      { key: 'amountPaid', label: 'Amount Paid (€)' },
       { key: 'createdAt', label: 'Registration Date' },
     ];
 
-    const data = attendees.map((a) => ({
+    const data = filteredAttendees.map((a) => ({
       ...a,
+      amountPaid: a.amountPaid?.toFixed(2) || '0.00',
       createdAt: a.createdAt?.toDate?.()
         ? a.createdAt.toDate().toLocaleDateString()
         : 'N/A',
@@ -94,30 +120,20 @@ export default function EventDetailPage() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to send emails');
+      const result = await response.json();
 
-      alert('Emails sent successfully!');
+      if (!response.ok) throw new Error(result.error || 'Failed to send emails');
+
+      alert(`${result.successful} emails sent successfully!`);
       setEmailModalOpen(false);
       setEmailSubject('');
       setEmailBody('');
     } catch (error) {
       console.error('Error sending emails:', error);
-      alert('Failed to send emails');
+      alert('Failed to send emails: ' + error.message);
     } finally {
       setSendingEmail(false);
     }
-  };
-
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'No date';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   };
 
   if (loading) {
@@ -139,7 +155,7 @@ export default function EventDetailPage() {
     );
   }
 
-  const revenue = attendees.length * (event.price || 0);
+  const tickets = event.tickets || [];
 
   return (
     <div className="space-y-8">
@@ -174,7 +190,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -193,7 +209,7 @@ export default function EventDetailPage() {
               <span className="text-2xl">💰</span>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Revenue</p>
+              <p className="text-sm text-gray-500">Total Revenue</p>
               <p className="text-2xl font-bold text-gray-900">{revenue.toFixed(2)} €</p>
             </div>
           </div>
@@ -205,17 +221,81 @@ export default function EventDetailPage() {
               <span className="text-2xl">🎫</span>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Ticket Price</p>
-              <p className="text-2xl font-bold text-gray-900">{event.price} €</p>
+              <p className="text-sm text-gray-500">Ticket Types</p>
+              <p className="text-2xl font-bold text-gray-900">{tickets.length || 1}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">📊</span>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Avg. Ticket Price</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {attendees.length > 0 ? (revenue / attendees.length).toFixed(2) : '0.00'} €
+              </p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Ticket Types Breakdown */}
+      {tickets.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Ticket Types</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {tickets.map((ticket) => {
+              const ticketAttendees = attendees.filter(
+                (a) => a.ticketId === ticket.id || a.ticketName === ticket.name
+              );
+              const ticketRevenue = ticketAttendees.reduce(
+                (sum, a) => sum + (a.amountPaid || 0),
+                0
+              );
+              return (
+                <div
+                  key={ticket.id}
+                  className="p-4 bg-gray-50 rounded-lg border border-gray-200"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium text-gray-900">{ticket.name}</h3>
+                    <span className="font-bold text-indigo-600">{ticket.price} €</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <span>{ticketAttendees.length} sold</span>
+                    <span>•</span>
+                    <span>{ticketRevenue.toFixed(2)} € revenue</span>
+                  </div>
+                  {ticket.includes && ticket.includes.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {ticket.includes.slice(0, 3).map((item, i) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                      {ticket.includes.length > 3 && (
+                        <span className="text-xs text-gray-400">
+                          +{ticket.includes.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Event Details Card */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="md:flex">
-          {/* Banner */}
           <div className="md:w-1/3 h-48 md:h-auto bg-gradient-to-br from-indigo-400 to-purple-500">
             {event.bannerUrl ? (
               <img
@@ -230,7 +310,6 @@ export default function EventDetailPage() {
             )}
           </div>
 
-          {/* Info */}
           <div className="md:w-2/3 p-6 space-y-4">
             <div>
               <h3 className="text-sm font-medium text-gray-500">Description</h3>
@@ -252,7 +331,7 @@ export default function EventDetailPage() {
                     {event.meetingLink}
                   </a>
                 ) : (
-                  <span className="mt-1 inline-block">Not set</span>
+                  <span className="mt-1 inline-block text-gray-400">Not set</span>
                 )}
               </div>
 
@@ -262,6 +341,34 @@ export default function EventDetailPage() {
                   {event.language === 'fr' ? '🇫🇷 Français' : '🇬🇧 English'}
                 </p>
               </div>
+
+              {event.organizer && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Organizer</h3>
+                  <p className="text-gray-900 mt-1">{event.organizer}</p>
+                </div>
+              )}
+
+              {event.format && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Format</h3>
+                  <p className="text-gray-900 mt-1 capitalize">{event.format}</p>
+                </div>
+              )}
+
+              {event.emailDomain && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Email Restriction</h3>
+                  <p className="text-gray-900 mt-1">@{event.emailDomain}</p>
+                </div>
+              )}
+
+              {event.whoThisIsFor && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Target Audience</h3>
+                  <p className="text-gray-900 mt-1">{event.whoThisIsFor}</p>
+                </div>
+              )}
             </div>
 
             <div>
@@ -291,22 +398,37 @@ export default function EventDetailPage() {
 
       {/* Attendees */}
       <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+        <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Attendees</h2>
-            <p className="text-sm text-gray-500">{attendees.length} registered</p>
+            <p className="text-sm text-gray-500">{filteredAttendees.length} registered</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            {/* Ticket filter */}
+            {ticketTypes.length > 1 && (
+              <select
+                value={ticketFilter}
+                onChange={(e) => setTicketFilter(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="all">All Tickets</option>
+                {ticketTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => setEmailModalOpen(true)}
               disabled={attendees.length === 0}
               className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              📧 Send Email to All
+              📧 Send Email
             </button>
             <button
               onClick={handleExportCSV}
-              disabled={attendees.length === 0}
+              disabled={filteredAttendees.length === 0}
               className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               📥 Export CSV
@@ -314,7 +436,7 @@ export default function EventDetailPage() {
           </div>
         </div>
 
-        {attendees.length > 0 ? (
+        {filteredAttendees.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -326,15 +448,18 @@ export default function EventDetailPage() {
                     Email
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Registered
+                    Ticket
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
+                    Paid
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Registered
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {attendees.map((attendee) => (
+                {filteredAttendees.map((attendee) => (
                   <tr key={attendee.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">
@@ -349,15 +474,18 @@ export default function EventDetailPage() {
                         {attendee.email}
                       </a>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
+                        {attendee.ticketName || 'General'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {attendee.amountPaid?.toFixed(2) || '0.00'} €
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {attendee.createdAt?.toDate?.()
                         ? attendee.createdAt.toDate().toLocaleDateString()
                         : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                        Paid
-                      </span>
                     </td>
                   </tr>
                 ))}

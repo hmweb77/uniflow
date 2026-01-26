@@ -17,14 +17,17 @@ export default function PublicEventPage() {
   const [error, setError] = useState('');
   const [locale, setLocale] = useState('en');
   const [showRegistration, setShowRegistration] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState(null);
 
   // Registration form
   const [formData, setFormData] = useState({
     name: '',
     surname: '',
     email: '',
+    emailPrefix: '', // For domain-restricted emails
   });
   const [submitting, setSubmitting] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   const t = getTranslations(locale);
 
@@ -45,6 +48,23 @@ export default function PublicEventPage() {
         const eventData = { id: eventDoc.id, ...eventDoc.data() };
         setEvent(eventData);
         setLocale(eventData.language || 'en');
+
+        // Auto-select first ticket if only one exists
+        if (eventData.tickets && eventData.tickets.length === 1) {
+          setSelectedTicket(eventData.tickets[0]);
+        }
+        // Legacy: create ticket from price if no tickets array
+        else if (!eventData.tickets && eventData.price) {
+          const legacyTicket = {
+            id: 'default',
+            name: 'General Admission',
+            price: eventData.price,
+            description: '',
+            includes: [],
+          };
+          setEvent({ ...eventData, tickets: [legacyTicket] });
+          setSelectedTicket(legacyTicket);
+        }
       } else {
         setError('Event not found');
       }
@@ -59,10 +79,51 @@ export default function PublicEventPage() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setEmailError('');
+  };
+
+  const validateEmail = () => {
+    const emailDomain = event?.emailDomain?.trim();
+
+    // If domain restriction exists
+    if (emailDomain) {
+      const fullEmail = `${formData.emailPrefix}@${emailDomain}`;
+      // Basic validation
+      if (!formData.emailPrefix || formData.emailPrefix.length < 2) {
+        setEmailError(
+          locale === 'fr'
+            ? 'Veuillez entrer votre identifiant email'
+            : 'Please enter your email prefix'
+        );
+        return null;
+      }
+      return fullEmail;
+    }
+
+    // No domain restriction - validate full email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setEmailError(
+        locale === 'fr'
+          ? 'Veuillez entrer une adresse email valide'
+          : 'Please enter a valid email address'
+      );
+      return null;
+    }
+    return formData.email;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!selectedTicket) {
+      setError(locale === 'fr' ? 'Veuillez sélectionner un ticket' : 'Please select a ticket');
+      return;
+    }
+
+    const validatedEmail = validateEmail();
+    if (!validatedEmail) return;
+
     setSubmitting(true);
 
     try {
@@ -72,10 +133,12 @@ export default function PublicEventPage() {
         body: JSON.stringify({
           eventId: event.id,
           eventTitle: event.title,
-          price: event.price,
+          price: selectedTicket.price,
+          ticketId: selectedTicket.id,
+          ticketName: selectedTicket.name,
           customerName: formData.name,
           customerSurname: formData.surname,
-          customerEmail: formData.email,
+          customerEmail: validatedEmail,
           locale,
         }),
       });
@@ -85,11 +148,15 @@ export default function PublicEventPage() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        throw new Error('Failed to create checkout session');
+        throw new Error(data.error || 'Failed to create checkout session');
       }
     } catch (err) {
       console.error('Checkout error:', err);
-      alert('Failed to proceed to payment. Please try again.');
+      alert(
+        locale === 'fr'
+          ? 'Échec du paiement. Veuillez réessayer.'
+          : 'Failed to proceed to payment. Please try again.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -116,6 +183,39 @@ export default function PublicEventPage() {
     });
   };
 
+  const getFormatIcon = (format) => {
+    switch (format) {
+      case 'live':
+        return '🔴';
+      case 'replay':
+        return '📹';
+      case 'materials':
+        return '📚';
+      case 'hybrid':
+        return '🎯';
+      default:
+        return '🎓';
+    }
+  };
+
+  const getFormatLabel = (format) => {
+    const labels = {
+      en: {
+        live: 'Live Session',
+        replay: 'Replay / Recording',
+        materials: 'Materials Only',
+        hybrid: 'Live + Materials',
+      },
+      fr: {
+        live: 'Session en direct',
+        replay: 'Replay / Enregistrement',
+        materials: 'Supports uniquement',
+        hybrid: 'Live + Supports',
+      },
+    };
+    return labels[locale]?.[format] || format;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -129,12 +229,21 @@ export default function PublicEventPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center">
           <div className="text-6xl mb-4">🔍</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Event Not Found</h1>
-          <p className="text-gray-500">The event you're looking for doesn't exist or has been removed.</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {locale === 'fr' ? 'Événement non trouvé' : 'Event Not Found'}
+          </h1>
+          <p className="text-gray-500">
+            {locale === 'fr'
+              ? "L'événement que vous cherchez n'existe pas."
+              : "The event you're looking for doesn't exist."}
+          </p>
         </div>
       </div>
     );
   }
+
+  const tickets = event.tickets || [];
+  const hasEmailRestriction = event.emailDomain && event.emailDomain.trim().length > 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -175,11 +284,25 @@ export default function PublicEventPage() {
 
       {/* Content */}
       <div className={`max-w-2xl mx-auto px-4 py-12 ${event.logoUrl ? 'pt-16' : ''}`}>
-        {/* Title */}
+        {/* Title & Meta */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+          {/* Format badge */}
+          {event.format && (
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium mb-4">
+              {getFormatIcon(event.format)} {getFormatLabel(event.format)}
+            </div>
+          )}
+
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
             {event.title}
           </h1>
+
+          {/* Organizer */}
+          {event.organizer && (
+            <p className="text-gray-600 mb-4">
+              {locale === 'fr' ? 'Par' : 'By'} <span className="font-medium">{event.organizer}</span>
+            </p>
+          )}
 
           {/* Date & Time */}
           <div className="flex items-center justify-center gap-4 text-gray-600">
@@ -196,7 +319,7 @@ export default function PublicEventPage() {
 
         {/* Description */}
         {event.description && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
             <h2 className="font-semibold text-gray-900 mb-3">
               {locale === 'fr' ? 'À propos' : 'About'}
             </h2>
@@ -204,68 +327,151 @@ export default function PublicEventPage() {
           </div>
         )}
 
-        {/* Price Card */}
+        {/* Who This Is For */}
+        {event.whoThisIsFor && (
+          <div className="bg-indigo-50 rounded-xl p-6 mb-6">
+            <h2 className="font-semibold text-indigo-900 mb-2">
+              {locale === 'fr' ? '👤 Pour qui ?' : '👤 Who is this for?'}
+            </h2>
+            <p className="text-indigo-700">{event.whoThisIsFor}</p>
+          </div>
+        )}
+
+        {/* Tickets Section */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <p className="text-sm text-gray-500">{t.common.price}</p>
-              <p className="text-3xl font-bold text-gray-900">{event.price} €</p>
-            </div>
-            <div className="text-4xl">🎓</div>
+          <h2 className="font-semibold text-gray-900 mb-4">
+            {locale === 'fr' ? '🎫 Choisir un ticket' : '🎫 Select a Ticket'}
+          </h2>
+
+          <div className="space-y-4">
+            {tickets.map((ticket) => (
+              <div
+                key={ticket.id}
+                onClick={() => {
+                  setSelectedTicket(ticket);
+                  setShowRegistration(true);
+                }}
+                className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                  selectedTicket?.id === ticket.id
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : 'border-gray-200 hover:border-indigo-300'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-gray-900">{ticket.name}</h3>
+                  <span className="text-xl font-bold text-indigo-600">
+                    {ticket.price} €
+                  </span>
+                </div>
+
+                {ticket.description && (
+                  <p className="text-sm text-gray-500 mb-3">{ticket.description}</p>
+                )}
+
+                {ticket.includes && ticket.includes.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {ticket.includes.map((item, i) => (
+                      <span
+                        key={i}
+                        className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full"
+                      >
+                        ✓ {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
-          {!showRegistration ? (
-            <button
-              onClick={() => setShowRegistration(true)}
-              className="w-full py-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors text-lg"
-            >
-              {t.common.bookNow}
-            </button>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t.registration.name} *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  placeholder={t.registration.namePlaceholder}
-                />
-              </div>
+          {/* Registration Form */}
+          {showRegistration && selectedTicket && (
+            <form onSubmit={handleSubmit} className="mt-6 pt-6 border-t border-gray-200 space-y-4">
+              <h3 className="font-semibold text-gray-900">
+                {locale === 'fr' ? 'Vos informations' : 'Your Information'}
+              </h3>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t.registration.surname} *
-                </label>
-                <input
-                  type="text"
-                  name="surname"
-                  value={formData.surname}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  placeholder={t.registration.surnamePlaceholder}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t.registration.name} *
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    placeholder={t.registration.namePlaceholder}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t.registration.surname} *
+                  </label>
+                  <input
+                    type="text"
+                    name="surname"
+                    value={formData.surname}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    placeholder={t.registration.surnamePlaceholder}
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t.registration.email} *
                 </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  placeholder={t.registration.emailPlaceholder}
-                />
+
+                {hasEmailRestriction ? (
+                  // Domain-restricted email input
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      name="emailPrefix"
+                      value={formData.emailPrefix}
+                      onChange={handleInputChange}
+                      required
+                      className={`flex-1 px-4 py-3 border rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none ${
+                        emailError ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder={locale === 'fr' ? 'prenom.nom' : 'firstname.lastname'}
+                    />
+                    <span className="px-4 py-3 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600">
+                      @{event.emailDomain}
+                    </span>
+                  </div>
+                ) : (
+                  // Standard email input
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    required
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none ${
+                      emailError ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder={t.registration.emailPlaceholder}
+                  />
+                )}
+
+                {emailError && (
+                  <p className="text-red-500 text-sm mt-1">{emailError}</p>
+                )}
+
+                {hasEmailRestriction && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    {locale === 'fr'
+                      ? `Seules les adresses @${event.emailDomain} sont acceptées`
+                      : `Only @${event.emailDomain} addresses are accepted`}
+                  </p>
+                )}
               </div>
 
               <p className="text-xs text-gray-500">{t.registration.termsNotice}</p>
@@ -277,12 +483,15 @@ export default function PublicEventPage() {
               >
                 {submitting
                   ? t.common.loading
-                  : `${t.registration.proceedToPayment} - ${event.price} €`}
+                  : `${t.registration.proceedToPayment} - ${selectedTicket.price} €`}
               </button>
 
               <button
                 type="button"
-                onClick={() => setShowRegistration(false)}
+                onClick={() => {
+                  setShowRegistration(false);
+                  setSelectedTicket(null);
+                }}
                 className="w-full py-2 text-gray-500 text-sm hover:text-gray-700"
               >
                 {t.common.cancel}

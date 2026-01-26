@@ -9,6 +9,14 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../../../lib/firebase';
 import Link from 'next/link';
 
+const DEFAULT_TICKET = {
+  id: '',
+  name: '',
+  price: '',
+  description: '',
+  includes: [],
+};
+
 export default function EditEventPage() {
   const router = useRouter();
   const params = useParams();
@@ -21,12 +29,17 @@ export default function EditEventPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    price: '',
     date: '',
     time: '',
     meetingLink: '',
     language: 'en',
+    organizer: '',
+    format: 'live',
+    whoThisIsFor: '',
+    emailDomain: '',
   });
+
+  const [tickets, setTickets] = useState([]);
 
   const [bannerFile, setBannerFile] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
@@ -51,12 +64,39 @@ export default function EditEventPage() {
         setFormData({
           title: data.title || '',
           description: data.description || '',
-          price: data.price?.toString() || '',
           date: eventDate.toISOString().split('T')[0],
           time: eventDate.toTimeString().slice(0, 5),
           meetingLink: data.meetingLink || '',
           language: data.language || 'en',
+          organizer: data.organizer || '',
+          format: data.format || 'live',
+          whoThisIsFor: data.whoThisIsFor || '',
+          emailDomain: data.emailDomain || '',
         });
+
+        // Load tickets or create default from legacy price
+        if (data.tickets && data.tickets.length > 0) {
+          setTickets(
+            data.tickets.map((t) => ({
+              ...t,
+              includesText: t.includes?.join(', ') || '',
+            }))
+          );
+        } else if (data.price) {
+          // Legacy: single price, convert to ticket
+          setTickets([
+            {
+              id: crypto.randomUUID(),
+              name: 'General Admission',
+              price: data.price.toString(),
+              description: '',
+              includes: [],
+              includesText: '',
+            },
+          ]);
+        } else {
+          setTickets([{ ...DEFAULT_TICKET, id: crypto.randomUUID() }]);
+        }
 
         setExistingBanner(data.bannerUrl || '');
         setExistingLogo(data.logoUrl || '');
@@ -93,6 +133,39 @@ export default function EditEventPage() {
     reader.readAsDataURL(file);
   };
 
+  // Ticket management functions
+  const addTicket = () => {
+    setTickets([...tickets, { ...DEFAULT_TICKET, id: crypto.randomUUID() }]);
+  };
+
+  const removeTicket = (ticketId) => {
+    if (tickets.length === 1) {
+      setError('You need at least one ticket type');
+      return;
+    }
+    setTickets(tickets.filter((t) => t.id !== ticketId));
+  };
+
+  const updateTicket = (ticketId, field, value) => {
+    setTickets(
+      tickets.map((t) => (t.id === ticketId ? { ...t, [field]: value } : t))
+    );
+  };
+
+  const updateTicketIncludes = (ticketId, includesText) => {
+    const includesArray = includesText
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    setTickets(
+      tickets.map((t) =>
+        t.id === ticketId
+          ? { ...t, includes: includesArray, includesText: includesText }
+          : t
+      )
+    );
+  };
+
   const uploadImage = async (file, path) => {
     const storageRef = ref(storage, path);
     await uploadBytes(storageRef, file);
@@ -105,8 +178,14 @@ export default function EditEventPage() {
     setSaving(true);
 
     try {
-      if (!formData.title || !formData.price || !formData.date || !formData.time) {
+      if (!formData.title || !formData.date || !formData.time) {
         throw new Error('Please fill in all required fields');
+      }
+
+      // Validate tickets
+      const validTickets = tickets.filter((t) => t.name && t.price);
+      if (validTickets.length === 0) {
+        throw new Error('Please add at least one ticket with name and price');
       }
 
       let bannerUrl = existingBanner;
@@ -121,15 +200,30 @@ export default function EditEventPage() {
 
       const eventDateTime = new Date(`${formData.date}T${formData.time}`);
 
+      // Prepare tickets for storage
+      const cleanedTickets = validTickets.map((t, index) => ({
+        id: t.id || crypto.randomUUID(),
+        name: t.name.trim(),
+        price: parseFloat(t.price),
+        description: t.description?.trim() || '',
+        includes: t.includes || [],
+        order: index,
+      }));
+
       const updateData = {
         title: formData.title,
         description: formData.description,
-        price: parseFloat(formData.price),
+        organizer: formData.organizer,
+        format: formData.format,
+        whoThisIsFor: formData.whoThisIsFor,
+        emailDomain: formData.emailDomain.trim(),
         date: eventDateTime,
         meetingLink: formData.meetingLink,
         language: formData.language,
         bannerUrl,
         logoUrl,
+        tickets: cleanedTickets,
+        price: Math.min(...cleanedTickets.map((t) => t.price)),
         updatedAt: serverTimestamp(),
       };
 
@@ -153,7 +247,7 @@ export default function EditEventPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <Link
@@ -194,6 +288,20 @@ export default function EditEventPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
+              Organizer / Instructor Name
+            </label>
+            <input
+              type="text"
+              name="organizer"
+              value={formData.organizer}
+              onChange={handleInputChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              placeholder="Prof. John Smith"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Description
             </label>
             <textarea
@@ -208,18 +316,19 @@ export default function EditEventPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Price (€) *
+                Event Format
               </label>
-              <input
-                type="number"
-                name="price"
-                value={formData.price}
+              <select
+                name="format"
+                value={formData.format}
                 onChange={handleInputChange}
-                required
-                min="0"
-                step="0.01"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-              />
+              >
+                <option value="live">🔴 Live Session</option>
+                <option value="replay">📹 Replay / Recording</option>
+                <option value="materials">📚 Materials Only</option>
+                <option value="hybrid">🎯 Live + Materials</option>
+              </select>
             </div>
 
             <div>
@@ -232,10 +341,130 @@ export default function EditEventPage() {
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               >
-                <option value="en">English</option>
-                <option value="fr">Français</option>
+                <option value="en">🇬🇧 English</option>
+                <option value="fr">🇫🇷 Français</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Who This Is For
+            </label>
+            <input
+              type="text"
+              name="whoThisIsFor"
+              value={formData.whoThisIsFor}
+              onChange={handleInputChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              placeholder="B2 students, MBA candidates, Finance majors..."
+            />
+          </div>
+        </div>
+
+        {/* Tickets Section */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Ticket Types</h2>
+              <p className="text-sm text-gray-500">Manage ticket options</p>
+            </div>
+            <button
+              type="button"
+              onClick={addTicket}
+              className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+            >
+              + Add Ticket
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            {tickets.map((ticket, index) => (
+              <div
+                key={ticket.id}
+                className="p-4 border border-gray-200 rounded-lg space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-500">
+                    Ticket #{index + 1}
+                  </span>
+                  {tickets.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeTicket(ticket.id)}
+                      className="text-red-500 hover:text-red-700 text-sm"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Ticket Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={ticket.name}
+                      onChange={(e) => updateTicket(ticket.id, 'name', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      placeholder="e.g., Live Session"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Price (€) *
+                    </label>
+                    <input
+                      type="number"
+                      value={ticket.price}
+                      onChange={(e) => updateTicket(ticket.id, 'price', e.target.value)}
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <input
+                    type="text"
+                    value={ticket.description || ''}
+                    onChange={(e) => updateTicket(ticket.id, 'description', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    What's Included (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={ticket.includesText || ticket.includes?.join(', ') || ''}
+                    onChange={(e) => updateTicketIncludes(ticket.id, e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  />
+                  {ticket.includes && ticket.includes.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {ticket.includes.map((item, i) => (
+                        <span
+                          key={i}
+                          className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full"
+                        >
+                          ✓ {item}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -290,6 +519,36 @@ export default function EditEventPage() {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               placeholder="https://zoom.us/j/123456789"
             />
+          </div>
+        </div>
+
+        {/* Email Restrictions */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">Registration Settings</h2>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Email Domain Restriction (Optional)
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">@</span>
+              <input
+                type="text"
+                name="emailDomain"
+                value={formData.emailDomain.replace('@', '')}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    emailDomain: e.target.value.replace('@', ''),
+                  }))
+                }
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                placeholder="edu.escp.eu"
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Leave empty to allow any email
+            </p>
           </div>
         </div>
 
