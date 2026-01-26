@@ -217,7 +217,7 @@ export default function AdminDashboard() {
       return () => clearInterval(interval);
     }, [event]);
 
-    return <span className="font-mono text-indigo-600 font-semibold">{countdown}</span>;
+    return <span className="font-mono text-white font-semibold">{countdown}</span>;
   };
 
   const formatDate = (timestamp) => {
@@ -305,7 +305,7 @@ export default function AdminDashboard() {
             <>
               <p className="font-semibold text-lg mb-1 line-clamp-1">{upcomingEvents[0].title}</p>
               <NextEventCountdown event={upcomingEvents[0]} />
-              <p className="text-indigo-200 text-xs mt-2">
+              <p className="text-indigo-00 text-xs mt-2">
                 {formatShortDate(upcomingEvents[0].date)}
               </p>
             </>
