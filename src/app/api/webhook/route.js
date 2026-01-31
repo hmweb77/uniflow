@@ -1,16 +1,17 @@
 // src/app/api/webhook/route.js
-// CRITICAL: Handles Stripe payment confirmations
+// IMPROVED: Handles Stripe webhooks, saves to attendees + users collections, sends email
 
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { adminDb } from '../../lib/firebase-admin';
 import { sendEmail, getConfirmationEmailTemplate, addContactToBrevo } from '../../lib/brevo';
 
-// IMPORTANT: Required for raw body access in Next.js App Router
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request) {
+  console.log('🔔 [WEBHOOK] Received request');
+  
   const body = await request.text();
   const headersList = await headers();
   const signature = headersList.get('stripe-signature');
@@ -20,52 +21,39 @@ export async function POST(request) {
   // ============================================
   
   if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error('STRIPE_WEBHOOK_SECRET is not configured');
-    return NextResponse.json(
-      { error: 'Webhook secret not configured' },
-      { status: 500 }
-    );
+    console.error('❌ [WEBHOOK] STRIPE_WEBHOOK_SECRET not configured');
+    return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
   }
 
   if (!signature) {
-    console.error('No Stripe signature found in request');
-    return NextResponse.json(
-      { error: 'No signature provided' },
-      { status: 400 }
-    );
+    console.error('❌ [WEBHOOK] No Stripe signature');
+    return NextResponse.json({ error: 'No signature' }, { status: 400 });
   }
 
   // ============================================
-  // VERIFY WEBHOOK SIGNATURE (CRITICAL!)
+  // VERIFY WEBHOOK SIGNATURE
   // ============================================
   
   let event;
 
   try {
     const Stripe = (await import('stripe')).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2023-10-16',
-    });
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
     
-    event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
+    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET);
+    console.log('✅ [WEBHOOK] Signature verified, event:', event.type);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return NextResponse.json(
-      { error: 'Webhook signature verification failed' },
-      { status: 400 }
-    );
+    console.error('❌ [WEBHOOK] Signature verification failed:', err.message);
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
   // ============================================
-  // HANDLE CHECKOUT COMPLETED EVENT
+  // HANDLE CHECKOUT COMPLETED
   // ============================================
   
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
+    console.log('💳 [WEBHOOK] Processing checkout:', session.id);
 
     try {
       const {
@@ -77,17 +65,15 @@ export async function POST(request) {
         customerEmail,
       } = session.metadata || {};
 
-      // Validate required metadata
+      console.log('📋 [WEBHOOK] Metadata:', { eventId, ticketId, ticketName, customerEmail });
+
       if (!eventId || !customerEmail) {
-        console.error('Missing required metadata in session:', session.id);
-        return NextResponse.json(
-          { error: 'Missing required metadata' },
-          { status: 400 }
-        );
+        console.error('❌ [WEBHOOK] Missing metadata');
+        return NextResponse.json({ error: 'Missing metadata' }, { status: 400 });
       }
 
       // ============================================
-      // IDEMPOTENCY CHECK (Prevent duplicates)
+      // IDEMPOTENCY CHECK
       // ============================================
       
       const existingAttendee = await adminDb
@@ -97,7 +83,7 @@ export async function POST(request) {
         .get();
 
       if (!existingAttendee.empty) {
-        console.log('Attendee already exists for session:', session.id);
+        console.log('⚠️ [WEBHOOK] Duplicate - already processed:', session.id);
         return NextResponse.json({ received: true, status: 'duplicate' });
       }
 
@@ -108,11 +94,12 @@ export async function POST(request) {
       const eventDoc = await adminDb.collection('events').doc(eventId).get();
 
       if (!eventDoc.exists) {
-        console.error('Event not found:', eventId);
+        console.error('❌ [WEBHOOK] Event not found:', eventId);
         return NextResponse.json({ received: true, status: 'event_not_found' });
       }
 
       const eventData = eventDoc.data();
+      console.log('📅 [WEBHOOK] Event:', eventData.title);
 
       // Find ticket details
       let ticketDetails = null;
@@ -124,11 +111,15 @@ export async function POST(request) {
       // SAVE ATTENDEE TO DATABASE
       // ============================================
       
-      const attendeeRef = await adminDb.collection('attendees').add({
+      const normalizedEmail = customerEmail.toLowerCase().trim();
+      const now = new Date();
+      
+      const attendeeData = {
         eventId,
+        eventTitle: eventData.title,
         name: customerName || '',
         surname: customerSurname || '',
-        email: customerEmail.toLowerCase(),
+        email: normalizedEmail,
         paymentStatus: 'completed',
         stripeSessionId: session.id,
         stripePaymentIntent: session.payment_intent,
@@ -137,17 +128,88 @@ export async function POST(request) {
         ticketId: ticketId || 'default',
         ticketName: ticketName || ticketDetails?.name || 'General Admission',
         ticketIncludes: ticketDetails?.includes || [],
-        createdAt: new Date(),
+        createdAt: now,
         stripeEventId: event.id,
-        processedAt: new Date(),
-      });
+        processedAt: now,
+      };
 
-      console.log('Attendee saved:', attendeeRef.id);
+      const attendeeRef = await adminDb.collection('attendees').add(attendeeData);
+      console.log('✅ [WEBHOOK] Attendee saved:', attendeeRef.id);
+
+      // ============================================
+      // CREATE/UPDATE USER IN USERS COLLECTION
+      // ============================================
+      
+      try {
+        // Check if user already exists by email
+        const existingUserQuery = await adminDb
+          .collection('users')
+          .where('email', '==', normalizedEmail)
+          .limit(1)
+          .get();
+
+        if (existingUserQuery.empty) {
+          // Create new user
+          const userData = {
+            email: normalizedEmail,
+            name: customerName || '',
+            surname: customerSurname || '',
+            createdAt: now,
+            updatedAt: now,
+            totalSpent: session.amount_total / 100,
+            purchaseCount: 1,
+            events: [eventId],
+            lastPurchase: now,
+          };
+          
+          const userRef = await adminDb.collection('users').add(userData);
+          console.log('✅ [WEBHOOK] New user created:', userRef.id);
+        } else {
+          // Update existing user
+          const userDoc = existingUserQuery.docs[0];
+          const existingData = userDoc.data();
+          
+          const updatedEvents = existingData.events || [];
+          if (!updatedEvents.includes(eventId)) {
+            updatedEvents.push(eventId);
+          }
+          
+          await userDoc.ref.update({
+            name: customerName || existingData.name || '',
+            surname: customerSurname || existingData.surname || '',
+            updatedAt: now,
+            totalSpent: (existingData.totalSpent || 0) + (session.amount_total / 100),
+            purchaseCount: (existingData.purchaseCount || 0) + 1,
+            events: updatedEvents,
+            lastPurchase: now,
+          });
+          console.log('✅ [WEBHOOK] User updated:', userDoc.id);
+        }
+      } catch (userErr) {
+        console.error('⚠️ [WEBHOOK] Failed to update users collection:', userErr.message);
+        // Don't fail the webhook - attendee was already saved
+      }
+
+      // ============================================
+      // UPDATE EVENT ATTENDEE COUNT (OPTIONAL)
+      // ============================================
+      
+      try {
+        const eventRef = adminDb.collection('events').doc(eventId);
+        await eventRef.update({
+          attendeeCount: (eventData.attendeeCount || 0) + 1,
+          totalRevenue: (eventData.totalRevenue || 0) + (session.amount_total / 100),
+        });
+        console.log('✅ [WEBHOOK] Event stats updated');
+      } catch (eventUpdateErr) {
+        console.error('⚠️ [WEBHOOK] Failed to update event stats:', eventUpdateErr.message);
+      }
 
       // ============================================
       // SEND CONFIRMATION EMAIL
       // ============================================
       
+      // Parse event date
       let eventDate;
       if (eventData.date?.toDate) {
         eventDate = eventData.date.toDate();
@@ -167,72 +229,84 @@ export async function POST(request) {
         { hour: '2-digit', minute: '2-digit' }
       );
 
-      // Add to Brevo for reminders
-      try {
-        await addContactToBrevo({
-          email: customerEmail,
-          firstName: customerName || '',
-          lastName: customerSurname || '',
-          eventDate: eventDate,
-          eventTitle: eventData.title,
-          meetingLink: eventData.meetingLink || '',
-          eventId: eventId,
-          ticketType: ticketName || 'General Admission',
-          listId: 10,
-        });
-      } catch (brevoErr) {
-        console.error('Failed to add contact to Brevo:', brevoErr);
+      // Check if Brevo is configured
+      if (!process.env.BREVO_API_KEY) {
+        console.warn('⚠️ [WEBHOOK] BREVO_API_KEY not set - skipping email');
+        console.log('📧 [WEBHOOK] Would send email to:', normalizedEmail);
+      } else {
+        // Add to Brevo contact list
+        try {
+          await addContactToBrevo({
+            email: normalizedEmail,
+            firstName: customerName || '',
+            lastName: customerSurname || '',
+            eventDate: eventDate,
+            eventTitle: eventData.title,
+            meetingLink: eventData.meetingLink || '',
+            eventId: eventId,
+            ticketType: ticketName || 'General Admission',
+            listId: parseInt(process.env.BREVO_LIST_ID || '10'),
+          });
+          console.log('✅ [WEBHOOK] Contact added to Brevo');
+        } catch (brevoErr) {
+          console.error('⚠️ [WEBHOOK] Brevo contact error:', brevoErr.message);
+        }
+
+        // Send confirmation email
+        try {
+          const emailTemplate = getConfirmationEmailTemplate({
+            customerName: customerName || 'Student',
+            eventId,
+            eventTitle: eventData.title,
+            eventDate: formattedDate,
+            eventTime: formattedTime,
+            meetingLink: eventData.meetingLink || '',
+            ticketName: ticketName || 'General Admission',
+            locale: eventData.language || 'en',
+          });
+
+          const emailResult = await sendEmail({
+            to: normalizedEmail,
+            subject: emailTemplate.subject,
+            htmlContent: emailTemplate.htmlContent,
+            textContent: emailTemplate.textContent,
+          });
+
+          console.log('✅ [WEBHOOK] Email sent to:', normalizedEmail, emailResult);
+        } catch (emailErr) {
+          console.error('❌ [WEBHOOK] Email error:', emailErr.message);
+          console.error('❌ [WEBHOOK] Email error details:', emailErr);
+        }
       }
 
-      // Send email
-      try {
-        const emailTemplate = getConfirmationEmailTemplate({
-          customerName: customerName || 'Student',
-          eventId,
-          eventTitle: eventData.title,
-          eventDate: formattedDate,
-          eventTime: formattedTime,
-          meetingLink: eventData.meetingLink || '',
-          ticketName: ticketName || 'General Admission',
-          locale: eventData.language || 'en',
-        });
-
-        await sendEmail({
-          to: customerEmail,
-          subject: emailTemplate.subject,
-          htmlContent: emailTemplate.htmlContent,
-          textContent: emailTemplate.textContent,
-        });
-
-        console.log('Confirmation email sent to:', customerEmail);
-      } catch (emailErr) {
-        console.error('Failed to send confirmation email:', emailErr);
-      }
-
-      console.log('Webhook processed successfully for:', customerEmail);
+      console.log('🎉 [WEBHOOK] Success for:', normalizedEmail);
+      return NextResponse.json({ received: true, status: 'success', attendeeId: attendeeRef.id });
       
     } catch (err) {
-      console.error('Error processing webhook:', err);
-      return NextResponse.json(
-        { error: 'Error processing webhook' },
-        { status: 500 }
-      );
+      console.error('❌ [WEBHOOK] Processing error:', err);
+      return NextResponse.json({ error: 'Processing error' }, { status: 500 });
     }
   }
 
-  // Handle other events (optional logging)
+  // Handle other events
   if (event.type === 'payment_intent.payment_failed') {
-    console.log('Payment failed:', event.data.object.id);
+    console.log('⚠️ [WEBHOOK] Payment failed:', event.data.object.id);
   }
 
   if (event.type === 'charge.refunded') {
-    console.log('Refund processed:', event.data.object.id);
+    console.log('💸 [WEBHOOK] Refund:', event.data.object.id);
   }
 
   return NextResponse.json({ received: true });
 }
 
-// Only allow POST
 export async function GET() {
-  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
+  return NextResponse.json({ 
+    status: 'Webhook endpoint active',
+    configured: {
+      stripeSecret: !!process.env.STRIPE_SECRET_KEY,
+      webhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
+      brevoKey: !!process.env.BREVO_API_KEY,
+    }
+  });
 }

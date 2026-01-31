@@ -1,20 +1,23 @@
 // src/app/admin/users/page.js
+// Users/Customers page - reads from both 'users' and 'attendees' collections
 
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { generateCSV, downloadCSV } from '../../lib/utils';
+import { generateCSV, downloadCSV, generateXLS, downloadXLS } from '../../lib/utils';
+import Link from 'next/link';
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [events, setEvents] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('totalSpent'); // totalSpent, name, purchases
+  const [sortBy, setSortBy] = useState('totalSpent');
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [dataSource, setDataSource] = useState('auto'); // 'users', 'attendees', 'auto'
 
   useEffect(() => {
     fetchData();
@@ -31,62 +34,109 @@ export default function UsersPage() {
       });
       setEvents(eventsMap);
 
-      // Fetch all attendees
-      const attendeesRef = collection(db, 'attendees');
-      const attendeesSnap = await getDocs(attendeesRef);
-      const attendees = attendeesSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      // Try to fetch from 'users' collection first
+      let usersData = [];
+      let source = 'attendees';
 
-      // Group attendees by email to create user profiles
-      const usersMap = {};
-      attendees.forEach((attendee) => {
-        if (attendee.paymentStatus !== 'completed') return;
-
-        const email = attendee.email?.toLowerCase();
-        if (!email) return;
-
-        if (!usersMap[email]) {
-          usersMap[email] = {
-            email: attendee.email,
-            name: attendee.name,
-            surname: attendee.surname,
-            purchases: [],
-            totalSpent: 0,
-            firstPurchase: attendee.createdAt,
-            lastPurchase: attendee.createdAt,
-          };
+      try {
+        const usersRef = collection(db, 'users');
+        const usersSnap = await getDocs(query(usersRef, orderBy('createdAt', 'desc')));
+        
+        if (usersSnap.size > 0) {
+          source = 'users';
+          usersData = usersSnap.docs.map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              email: data.email,
+              name: data.name,
+              surname: data.surname,
+              totalSpent: data.totalSpent || 0,
+              purchaseCount: data.purchaseCount || 0,
+              events: data.events || [],
+              createdAt: data.createdAt,
+              lastPurchase: data.lastPurchase,
+              // Build purchases from events
+              purchases: (data.events || []).map((eventId) => ({
+                eventId,
+                eventTitle: eventsMap[eventId]?.title || 'Unknown Event',
+              })),
+            };
+          });
         }
+      } catch (usersErr) {
+        console.log('Users collection not available, falling back to attendees');
+      }
 
-        const event = eventsMap[attendee.eventId];
-        const purchaseAmount = attendee.amountPaid || event?.price || 0;
+      // If no users collection data, build from attendees
+      if (usersData.length === 0) {
+        const attendeesRef = collection(db, 'attendees');
+        const attendeesSnap = await getDocs(attendeesRef);
+        const attendees = attendeesSnap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
 
-        usersMap[email].purchases.push({
-          eventId: attendee.eventId,
-          eventTitle: event?.title || 'Unknown Event',
-          amount: purchaseAmount,
-          date: attendee.createdAt,
+        // Group attendees by email
+        const usersMap = {};
+        attendees.forEach((attendee) => {
+          if (attendee.paymentStatus !== 'completed') return;
+
+          const email = attendee.email?.toLowerCase();
+          if (!email) return;
+
+          if (!usersMap[email]) {
+            usersMap[email] = {
+              email: attendee.email,
+              name: attendee.name,
+              surname: attendee.surname,
+              purchases: [],
+              totalSpent: 0,
+              firstPurchase: attendee.createdAt,
+              lastPurchase: attendee.createdAt,
+            };
+          }
+
+          const event = eventsMap[attendee.eventId];
+          const purchaseAmount = attendee.amountPaid || event?.price || 0;
+
+          usersMap[email].purchases.push({
+            eventId: attendee.eventId,
+            eventTitle: event?.title || attendee.eventTitle || 'Unknown Event',
+            amount: purchaseAmount,
+            date: attendee.createdAt,
+            ticketName: attendee.ticketName,
+          });
+
+          usersMap[email].totalSpent += purchaseAmount;
+
+          // Update name if more recent
+          const attendeeDate = attendee.createdAt?.toDate?.() || new Date(attendee.createdAt);
+          const lastDate = usersMap[email].lastPurchase?.toDate?.() || new Date(usersMap[email].lastPurchase);
+          
+          if (attendeeDate > lastDate) {
+            usersMap[email].name = attendee.name || usersMap[email].name;
+            usersMap[email].surname = attendee.surname || usersMap[email].surname;
+            usersMap[email].lastPurchase = attendee.createdAt;
+          }
+
+          // Track first purchase
+          const firstDate = usersMap[email].firstPurchase?.toDate?.() || new Date(usersMap[email].firstPurchase);
+          if (attendeeDate < firstDate) {
+            usersMap[email].firstPurchase = attendee.createdAt;
+          }
         });
 
-        usersMap[email].totalSpent += purchaseAmount;
+        // Convert to array and add purchaseCount
+        usersData = Object.values(usersMap).map((user) => ({
+          ...user,
+          purchaseCount: user.purchases.length,
+          events: user.purchases.map((p) => p.eventId),
+        }));
+      }
 
-        // Update name if more recent
-        if (attendee.createdAt > usersMap[email].lastPurchase) {
-          usersMap[email].name = attendee.name;
-          usersMap[email].surname = attendee.surname;
-          usersMap[email].lastPurchase = attendee.createdAt;
-        }
-
-        // Track first purchase
-        if (attendee.createdAt < usersMap[email].firstPurchase) {
-          usersMap[email].firstPurchase = attendee.createdAt;
-        }
-      });
-
-      // Convert to array
-      const usersArray = Object.values(usersMap);
-      setUsers(usersArray);
+      setDataSource(source);
+      setUsers(usersData);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -127,24 +177,24 @@ export default function UsersPage() {
       let aVal, bVal;
       switch (sortBy) {
         case 'totalSpent':
-          aVal = a.totalSpent;
-          bVal = b.totalSpent;
+          aVal = a.totalSpent || 0;
+          bVal = b.totalSpent || 0;
           break;
         case 'purchases':
-          aVal = a.purchases.length;
-          bVal = b.purchases.length;
+          aVal = a.purchaseCount || a.purchases?.length || 0;
+          bVal = b.purchaseCount || b.purchases?.length || 0;
           break;
         case 'name':
-          aVal = `${a.name} ${a.surname}`.toLowerCase();
-          bVal = `${b.name} ${b.surname}`.toLowerCase();
+          aVal = `${a.name || ''} ${a.surname || ''}`.toLowerCase();
+          bVal = `${b.name || ''} ${b.surname || ''}`.toLowerCase();
           break;
         case 'lastPurchase':
-          aVal = a.lastPurchase?.toDate?.() || new Date(a.lastPurchase);
-          bVal = b.lastPurchase?.toDate?.() || new Date(b.lastPurchase);
+          aVal = a.lastPurchase?.toDate?.() || new Date(a.lastPurchase || 0);
+          bVal = b.lastPurchase?.toDate?.() || new Date(b.lastPurchase || 0);
           break;
         default:
-          aVal = a.totalSpent;
-          bVal = b.totalSpent;
+          aVal = a.totalSpent || 0;
+          bVal = b.totalSpent || 0;
       }
       if (sortOrder === 'asc') {
         return aVal > bVal ? 1 : -1;
@@ -163,22 +213,45 @@ export default function UsersPage() {
     ];
 
     const data = users.map((user) => ({
-      name: user.name,
-      surname: user.surname,
-      email: user.email,
-      purchaseCount: user.purchases.length,
-      totalSpent: user.totalSpent.toFixed(2),
-      courses: user.purchases.map((p) => p.eventTitle).join('; '),
+      name: user.name || '',
+      surname: user.surname || '',
+      email: user.email || '',
+      purchaseCount: user.purchaseCount || user.purchases?.length || 0,
+      totalSpent: (user.totalSpent || 0).toFixed(2),
+      courses: (user.purchases || []).map((p) => p.eventTitle).join('; '),
     }));
 
     const csv = generateCSV(data, headers);
-    downloadCSV(csv, 'uniflow_customers.csv');
+    downloadCSV(csv, `uniflow_customers_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const handleExportXLS = () => {
+    const headers = [
+      { key: 'name', label: 'First Name' },
+      { key: 'surname', label: 'Last Name' },
+      { key: 'email', label: 'Email' },
+      { key: 'purchaseCount', label: 'Purchases' },
+      { key: 'totalSpent', label: 'Total Spent (€)' },
+      { key: 'courses', label: 'Courses' },
+    ];
+
+    const data = users.map((user) => ({
+      name: user.name || '',
+      surname: user.surname || '',
+      email: user.email || '',
+      purchaseCount: user.purchaseCount || user.purchases?.length || 0,
+      totalSpent: (user.totalSpent || 0).toFixed(2),
+      courses: (user.purchases || []).map((p) => p.eventTitle).join('; '),
+    }));
+
+    const xls = generateXLS(data, headers);
+    downloadXLS(xls, `uniflow_customers_${new Date().toISOString().split('T')[0]}.xls`);
   };
 
   // Calculate totals
   const totalUsers = users.length;
-  const totalRevenue = users.reduce((sum, user) => sum + user.totalSpent, 0);
-  const totalPurchases = users.reduce((sum, user) => sum + user.purchases.length, 0);
+  const totalRevenue = users.reduce((sum, user) => sum + (user.totalSpent || 0), 0);
+  const totalPurchases = users.reduce((sum, user) => sum + (user.purchaseCount || user.purchases?.length || 0), 0);
   const avgSpentPerUser = totalUsers > 0 ? totalRevenue / totalUsers : 0;
 
   if (loading) {
@@ -195,15 +268,29 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-          <p className="text-gray-500 mt-1">All users who purchased tickets</p>
+          <p className="text-gray-500 mt-1">
+            All users who purchased tickets
+            <span className="ml-2 text-xs text-gray-400">
+              (Source: {dataSource === 'users' ? 'users collection' : 'attendees collection'})
+            </span>
+          </p>
         </div>
-        <button
-          onClick={handleExportCSV}
-          disabled={users.length === 0}
-          className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          📥 Export CSV
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleExportCSV}
+            disabled={users.length === 0}
+            className="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+          >
+            📥 CSV
+          </button>
+          <button
+            onClick={handleExportXLS}
+            disabled={users.length === 0}
+            className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+          >
+            📊 Export XLS
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -227,7 +314,7 @@ export default function UsersPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Total Revenue</p>
-              <p className="text-xl font-bold text-gray-900">{totalRevenue.toFixed(2)} €</p>
+              <p className="text-xl font-bold text-gray-900">€{totalRevenue.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -251,7 +338,7 @@ export default function UsersPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Avg. per Customer</p>
-              <p className="text-xl font-bold text-gray-900">{avgSpentPerUser.toFixed(2)} €</p>
+              <p className="text-xl font-bold text-gray-900">€{avgSpentPerUser.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -331,15 +418,16 @@ export default function UsersPage() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {sortedUsers.map((user, index) => (
-                  <tr key={user.email} className="hover:bg-gray-50">
+                  <tr key={user.id || user.email || index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                          {user.name?.charAt(0).toUpperCase() || '?'}
+                          {(user.name || user.email || '?').charAt(0).toUpperCase()}
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">
-                            {user.name} {user.surname}
+                            {user.name || ''} {user.surname || ''}
+                            {!user.name && !user.surname && <span className="text-gray-400">No name</span>}
                           </p>
                         </div>
                       </div>
@@ -354,12 +442,12 @@ export default function UsersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
-                        {user.purchases.length} course{user.purchases.length !== 1 ? 's' : ''}
+                        {user.purchaseCount || user.purchases?.length || 0} event{(user.purchaseCount || user.purchases?.length || 0) !== 1 ? 's' : ''}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="font-semibold text-gray-900">
-                        {user.totalSpent.toFixed(2)} €
+                        €{(user.totalSpent || 0).toFixed(2)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -395,11 +483,12 @@ export default function UsersPage() {
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center text-white text-xl font-semibold">
-                  {selectedUser.name?.charAt(0).toUpperCase() || '?'}
+                  {(selectedUser.name || selectedUser.email || '?').charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">
-                    {selectedUser.name} {selectedUser.surname}
+                    {selectedUser.name || ''} {selectedUser.surname || ''}
+                    {!selectedUser.name && !selectedUser.surname && 'Customer'}
                   </h2>
                   <a
                     href={`mailto:${selectedUser.email}`}
@@ -423,44 +512,79 @@ export default function UsersPage() {
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="bg-gray-50 rounded-lg p-4 text-center">
                   <p className="text-2xl font-bold text-gray-900">
-                    {selectedUser.purchases.length}
+                    {selectedUser.purchaseCount || selectedUser.purchases?.length || 0}
                   </p>
-                  <p className="text-sm text-gray-500">Courses</p>
+                  <p className="text-sm text-gray-500">Events</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4 text-center">
                   <p className="text-2xl font-bold text-gray-900">
-                    {selectedUser.totalSpent.toFixed(2)} €
+                    €{(selectedUser.totalSpent || 0).toFixed(2)}
                   </p>
                   <p className="text-sm text-gray-500">Total Spent</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4 text-center">
                   <p className="text-2xl font-bold text-gray-900">
-                    {formatDate(selectedUser.firstPurchase)}
+                    {formatDate(selectedUser.firstPurchase || selectedUser.createdAt)}
                   </p>
                   <p className="text-sm text-gray-500">First Purchase</p>
                 </div>
               </div>
 
-              {/* Purchase History */}
-              <h3 className="font-semibold text-gray-900 mb-4">Purchase History</h3>
+              {/* Enrolled Events */}
+              <h3 className="font-semibold text-gray-900 mb-4">Enrolled Events</h3>
               <div className="space-y-3">
-                {selectedUser.purchases.map((purchase, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                        <span className="text-lg">🎓</span>
+                {(selectedUser.purchases || []).length > 0 ? (
+                  selectedUser.purchases.map((purchase, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                          <span className="text-lg">🎓</span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{purchase.eventTitle}</p>
+                          {purchase.ticketName && (
+                            <p className="text-xs text-gray-500">{purchase.ticketName}</p>
+                          )}
+                          {purchase.date && (
+                            <p className="text-sm text-gray-500">{formatDate(purchase.date)}</p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{purchase.eventTitle}</p>
-                        <p className="text-sm text-gray-500">{formatDate(purchase.date)}</p>
-                      </div>
+                      {purchase.amount !== undefined && (
+                        <p className="font-semibold text-gray-900">€{purchase.amount.toFixed(2)}</p>
+                      )}
                     </div>
-                    <p className="font-semibold text-gray-900">{purchase.amount.toFixed(2)} €</p>
-                  </div>
-                ))}
+                  ))
+                ) : selectedUser.events?.length > 0 ? (
+                  selectedUser.events.map((eventId, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                          <span className="text-lg">🎓</span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {events[eventId]?.title || 'Unknown Event'}
+                          </p>
+                        </div>
+                      </div>
+                      <Link
+                        href={`/admin/events/${eventId}`}
+                        className="text-indigo-600 hover:underline text-sm"
+                      >
+                        View Event
+                      </Link>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-400 text-center py-4">No purchase history available</p>
+                )}
               </div>
             </div>
 
