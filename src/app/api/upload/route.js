@@ -94,7 +94,8 @@ export async function POST(request) {
       );
     }
 
-    const bucket = getStorage(app).bucket();
+    const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    const bucket = getStorage(app).bucket(bucketName);
 
     // Generate unique filename
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
@@ -170,7 +171,8 @@ export async function GET() {
   // Try to initialize and test
   try {
     const app = getAdminApp();
-    const bucket = getStorage(app).bucket();
+    const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    const bucket = getStorage(app).bucket(bucketName);
     config.connection = '✅ Connected to: ' + bucket.name;
   } catch (err) {
     config.connection = '❌ Error: ' + err.message;

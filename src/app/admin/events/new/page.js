@@ -1,13 +1,12 @@
 // src/app/admin/events/new/page.js
+// Create new event page with server-side image upload (no CORS issues)
 
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../../lib/firebase';
-import { generateEventSlug } from '../../../lib/utils';
+import { db } from '../../../lib/firebase';
 import Link from 'next/link';
 
 const DEFAULT_TICKET = {
@@ -15,12 +14,13 @@ const DEFAULT_TICKET = {
   name: '',
   price: '',
   description: '',
-  includes: [], // Array of strings: what's included
+  includes: [],
 };
 
-export default function CreateEventPage() {
+export default function NewEventPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({
@@ -30,22 +30,17 @@ export default function CreateEventPage() {
     time: '',
     meetingLink: '',
     language: 'en',
-    // New fields
     organizer: '',
-    format: 'live', // live, replay, materials
+    format: 'live',
     whoThisIsFor: '',
-    emailDomain: '', // e.g., @edu.escp.eu (empty = any email allowed)
+    emailDomain: '',
   });
 
-  // Tickets state (array of ticket objects)
-  const [tickets, setTickets] = useState([
-    { ...DEFAULT_TICKET, id: crypto.randomUUID(), name: 'General Admission', price: '' },
-  ]);
-
-  const [bannerFile, setBannerFile] = useState(null);
-  const [logoFile, setLogoFile] = useState(null);
+  const [tickets, setTickets] = useState([{ ...DEFAULT_TICKET, id: crypto.randomUUID() }]);
   const [bannerPreview, setBannerPreview] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
+  const [pendingBannerFile, setPendingBannerFile] = useState(null);
+  const [pendingLogoFile, setPendingLogoFile] = useState(null);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -56,100 +51,121 @@ export default function CreateEventPage() {
     const file = e.target.files[0];
     if (!file) return;
 
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please select a valid image (JPEG, PNG, GIF, WebP)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB');
+      return;
+    }
+
+    // Create preview
     const reader = new FileReader();
     reader.onloadend = () => {
       if (type === 'banner') {
-        setBannerFile(file);
+        setPendingBannerFile(file);
         setBannerPreview(reader.result);
       } else {
-        setLogoFile(file);
+        setPendingLogoFile(file);
         setLogoPreview(reader.result);
       }
     };
     reader.readAsDataURL(file);
+    setError('');
   };
 
-  // Ticket management functions
+  // Server-side upload function - no CORS issues!
+  const uploadImage = async (file, path) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', path);
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Upload failed');
+    }
+
+    const data = await response.json();
+    return data.url;
+  };
+
   const addTicket = () => {
-    setTickets([
-      ...tickets,
-      { ...DEFAULT_TICKET, id: crypto.randomUUID() },
-    ]);
+    setTickets([...tickets, { ...DEFAULT_TICKET, id: crypto.randomUUID() }]);
   };
 
-  const removeTicket = (ticketId) => {
+  const removeTicket = (id) => {
     if (tickets.length === 1) {
       setError('You need at least one ticket type');
       return;
     }
-    setTickets(tickets.filter((t) => t.id !== ticketId));
+    setTickets(tickets.filter((t) => t.id !== id));
   };
 
-  const updateTicket = (ticketId, field, value) => {
-    setTickets(
-      tickets.map((t) =>
-        t.id === ticketId ? { ...t, [field]: value } : t
-      )
-    );
+  const updateTicket = (id, field, value) => {
+    setTickets(tickets.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
   };
 
-  const updateTicketIncludes = (ticketId, includesText) => {
-    // Convert comma-separated text to array
-    const includesArray = includesText
-      .split(',')
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
-    updateTicket(ticketId, 'includes', includesArray);
-    updateTicket(ticketId, 'includesText', includesText); // Keep raw text for editing
+  const updateTicketIncludes = (id, text) => {
+    const includesArray = text.split(',').map((s) => s.trim()).filter(Boolean);
+    setTickets(tickets.map((t) => (t.id === id ? { ...t, includes: includesArray, includesText: text } : t)));
   };
 
-  const uploadImage = async (file, path) => {
-    const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
-    return getDownloadURL(storageRef);
+  const generateSlug = (title) => {
+    return title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setSaving(true);
 
     try {
-      // Validate basic fields
+      // Validation
       if (!formData.title || !formData.date || !formData.time) {
         throw new Error('Please fill in all required fields');
       }
 
-      // Validate tickets
       const validTickets = tickets.filter((t) => t.name && t.price);
       if (validTickets.length === 0) {
         throw new Error('Please add at least one ticket with name and price');
       }
 
-      // Check for duplicate ticket names
-      const ticketNames = validTickets.map((t) => t.name.toLowerCase());
-      if (new Set(ticketNames).size !== ticketNames.length) {
-        throw new Error('Ticket names must be unique');
-      }
-
-      // Generate slug
-      const slug = generateEventSlug(formData.title);
-
-      // Upload images if provided
+      // Generate a temporary ID for the upload path
+      const tempId = crypto.randomUUID();
       let bannerUrl = '';
       let logoUrl = '';
 
-      if (bannerFile) {
-        bannerUrl = await uploadImage(bannerFile, `events/${slug}/banner`);
-      }
-      if (logoFile) {
-        logoUrl = await uploadImage(logoFile, `events/${slug}/logo`);
+      // Upload images using server-side API
+      if (pendingBannerFile || pendingLogoFile) {
+        setUploading(true);
+        
+        if (pendingBannerFile) {
+          console.log('Uploading banner...');
+          bannerUrl = await uploadImage(pendingBannerFile, `events/${tempId}`);
+          console.log('Banner uploaded:', bannerUrl);
+        }
+        
+        if (pendingLogoFile) {
+          console.log('Uploading logo...');
+          logoUrl = await uploadImage(pendingLogoFile, `events/${tempId}`);
+          console.log('Logo uploaded:', logoUrl);
+        }
+        
+        setUploading(false);
       }
 
-      // Combine date and time
+      // Prepare event data
       const eventDateTime = new Date(`${formData.date}T${formData.time}`);
-
-      // Prepare tickets for storage (clean up and add IDs)
       const cleanedTickets = validTickets.map((t, index) => ({
         id: t.id || crypto.randomUUID(),
         name: t.name.trim(),
@@ -159,9 +175,9 @@ export default function CreateEventPage() {
         order: index,
       }));
 
-      // Create event document
       const eventData = {
         title: formData.title,
+        slug: generateSlug(formData.title),
         description: formData.description,
         organizer: formData.organizer,
         format: formData.format,
@@ -170,26 +186,29 @@ export default function CreateEventPage() {
         date: eventDateTime,
         meetingLink: formData.meetingLink,
         language: formData.language,
-        slug,
         bannerUrl,
         logoUrl,
-        // New: tickets array instead of single price
         tickets: cleanedTickets,
-        // Keep legacy price field for backwards compatibility (use lowest price)
         price: Math.min(...cleanedTickets.map((t) => t.price)),
+        currency: 'EUR',
         status: 'published',
+        attendeeCount: 0,
+        totalRevenue: 0,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      await addDoc(collection(db, 'events'), eventData);
+      // Save to Firestore
+      const docRef = await addDoc(collection(db, 'events'), eventData);
+      console.log('Event created:', docRef.id);
 
-      router.push('/admin/events');
+      router.push(`/admin/events/${docRef.id}`);
     } catch (err) {
       console.error('Error creating event:', err);
       setError(err.message || 'Failed to create event');
+      setUploading(false);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -204,7 +223,7 @@ export default function CreateEventPage() {
           ← Back to events
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">Create New Event</h1>
-        <p className="text-gray-500 mt-1">Fill in the details for your event</p>
+        <p className="text-gray-500 mt-1">Fill in the details for your new event</p>
       </div>
 
       {/* Form */}
@@ -230,7 +249,7 @@ export default function CreateEventPage() {
               onChange={handleInputChange}
               required
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-              placeholder="Introduction to Marketing"
+              placeholder="Introduction to Financial Markets"
             />
           </div>
 
@@ -258,7 +277,7 @@ export default function CreateEventPage() {
               onChange={handleInputChange}
               rows={4}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
-              placeholder="Describe your event..."
+              placeholder="Describe what attendees will learn..."
             />
           </div>
 
@@ -316,7 +335,7 @@ export default function CreateEventPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Ticket Types</h2>
-              <p className="text-sm text-gray-500">Add one or more ticket options</p>
+              <p className="text-sm text-gray-500">Add different ticket options</p>
             </div>
             <button
               type="button"
@@ -331,9 +350,8 @@ export default function CreateEventPage() {
             {tickets.map((ticket, index) => (
               <div
                 key={ticket.id}
-                className="p-4 border border-gray-200 rounded-lg space-y-4 relative"
+                className="p-4 border border-gray-200 rounded-lg space-y-4"
               >
-                {/* Ticket header */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-500">
                     Ticket #{index + 1}
@@ -359,7 +377,7 @@ export default function CreateEventPage() {
                       value={ticket.name}
                       onChange={(e) => updateTicket(ticket.id, 'name', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                      placeholder="e.g., Live Session, Materials Only"
+                      placeholder="e.g., Live Session"
                     />
                   </div>
 
@@ -374,7 +392,7 @@ export default function CreateEventPage() {
                       min="0"
                       step="0.01"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                      placeholder="19.99"
+                      placeholder="29.99"
                     />
                   </div>
                 </div>
@@ -385,10 +403,10 @@ export default function CreateEventPage() {
                   </label>
                   <input
                     type="text"
-                    value={ticket.description}
+                    value={ticket.description || ''}
                     onChange={(e) => updateTicket(ticket.id, 'description', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                    placeholder="Short description of what this ticket includes"
+                    placeholder="Brief description of what's included"
                   />
                 </div>
 
@@ -398,10 +416,10 @@ export default function CreateEventPage() {
                   </label>
                   <input
                     type="text"
-                    value={ticket.includesText || ticket.includes?.join(', ') || ''}
+                    value={ticket.includesText || ''}
                     onChange={(e) => updateTicketIncludes(ticket.id, e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                    placeholder="Live session, Q&A, Slides, Recording access"
+                    placeholder="Live access, Recording, Course materials, Certificate"
                   />
                   {ticket.includes && ticket.includes.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
@@ -529,22 +547,23 @@ export default function CreateEventPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setBannerFile(null);
+                        setPendingBannerFile(null);
                         setBannerPreview(null);
                       }}
-                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600"
                     >
                       ×
                     </button>
+                    <p className="text-xs text-green-600 mt-2">Image selected ✓</p>
                   </div>
                 ) : (
                   <label className="cursor-pointer">
                     <div className="text-4xl mb-2">🖼️</div>
                     <p className="text-sm text-gray-500">Click to upload banner</p>
-                    <p className="text-xs text-gray-400">Recommended: 1200x630px</p>
+                    <p className="text-xs text-gray-400">Max 5MB, JPEG/PNG/WebP</p>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
                       onChange={(e) => handleFileChange(e, 'banner')}
                       className="hidden"
                     />
@@ -556,7 +575,7 @@ export default function CreateEventPage() {
             {/* Logo */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                University Logo
+                University / Organization Logo
               </label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-indigo-500 transition-colors">
                 {logoPreview ? (
@@ -569,22 +588,23 @@ export default function CreateEventPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setLogoFile(null);
+                        setPendingLogoFile(null);
                         setLogoPreview(null);
                       }}
-                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600"
                     >
                       ×
                     </button>
+                    <p className="text-xs text-green-600 mt-2">Image selected ✓</p>
                   </div>
                 ) : (
                   <label className="cursor-pointer">
                     <div className="text-4xl mb-2">🏫</div>
                     <p className="text-sm text-gray-500">Click to upload logo</p>
-                    <p className="text-xs text-gray-400">Recommended: 200x200px</p>
+                    <p className="text-xs text-gray-400">Max 5MB, JPEG/PNG/WebP</p>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
                       onChange={(e) => handleFileChange(e, 'logo')}
                       className="hidden"
                     />
@@ -605,10 +625,13 @@ export default function CreateEventPage() {
           </Link>
           <button
             type="submit"
-            disabled={loading}
-            className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={saving || uploading}
+            className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            {loading ? 'Creating...' : 'Create Event'}
+            {(saving || uploading) && (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            )}
+            {uploading ? 'Uploading images...' : saving ? 'Creating...' : 'Create Event'}
           </button>
         </div>
       </form>
