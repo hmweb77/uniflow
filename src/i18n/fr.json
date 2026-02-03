@@ -1,55 +1,215 @@
 {
-    "common": {
-      "bookNow": "Réserver",
-      "price": "Prix",
-      "date": "Date",
-      "time": "Heure",
-      "language": "Langue",
-      "loading": "Chargement...",
-      "error": "Une erreur s'est produite",
-      "success": "Succès !",
-      "cancel": "Annuler",
-      "save": "Enregistrer",
-      "delete": "Supprimer",
-      "edit": "Modifier",
-      "back": "Retour",
-      "next": "Suivant",
-      "submit": "Envoyer"
+  "common": {
+    "bookNow": "Réserver",
+    "price": "Prix",
+    "date": "Date",
+    "time": "Heure",
+    "language": "Langue",
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "success": "Succès !",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "back": "Retour",
+    "next": "Suivant",
+    "submit": "Envoyer",
+    "viewAll": "Voir tout",
+    "learnMore": "En savoir plus",
+    "free": "Gratuit",
+    "from": "À partir de",
+    "poweredBy": "Propulsé par Uniflow"
+  },
+  "nav": {
+    "home": "Accueil",
+    "events": "Événements",
+    "howItWorks": "Comment ça marche",
+    "faq": "FAQ",
+    "adminLogin": "Connexion Admin",
+    "login": "Connexion"
+  },
+  "hero": {
+    "badge": "Maintenant disponible pour les universités",
+    "titleLine1": "Cours en ligne,",
+    "titleHighlight": "Simplifiés",
+    "subtitle": "La façon la plus simple pour les étudiants de découvrir et payer des masterclasses en ligne premium. Aucun compte nécessaire.",
+    "ctaPrimary": "Voir les événements",
+    "ctaSecondary": "Comment ça marche",
+    "socialProof": "500+ étudiants inscrits",
+    "rating": "4.9/5 note"
+  },
+  "features": {
+    "sectionTitle": "Tout ce dont vous avez besoin pour les cours en ligne",
+    "sectionSubtitle": "Une expérience fluide pour les étudiants et les éducateurs",
+    "instantAccess": {
+      "title": "Accès instantané",
+      "description": "Payez une fois, recevez immédiatement le lien de votre cours par email."
     },
-    "event": {
-      "title": "Événement",
-      "description": "Description",
-      "dateAndTime": "Date & Heure",
-      "onlineClass": "Cours en ligne",
-      "spotsAvailable": "Places disponibles",
-      "soldOut": "Complet"
+    "securePayments": {
+      "title": "Paiements sécurisés",
+      "description": "Propulsé par Stripe avec support pour cartes, Apple Pay et Google Pay."
     },
-    "registration": {
-      "title": "Inscription",
-      "name": "Prénom",
-      "surname": "Nom",
-      "email": "Email",
-      "namePlaceholder": "Entrez votre prénom",
-      "surnamePlaceholder": "Entrez votre nom",
-      "emailPlaceholder": "Entrez votre email",
-      "proceedToPayment": "Procéder au paiement",
-      "termsNotice": "En vous inscrivant, vous acceptez de recevoir des emails liés à l'événement."
-    },
-    "success": {
-      "title": "Paiement réussi !",
-      "message": "Merci pour votre inscription. Vous recevrez un email de confirmation avec les détails de l'événement et le lien d'accès.",
-      "checkEmail": "Veuillez vérifier votre boîte de réception (et les spams)."
-    },
-    "admin": {
-      "dashboard": "Tableau de bord",
-      "events": "Événements",
-      "createEvent": "Créer un événement",
-      "attendees": "Participants",
-      "totalRevenue": "Revenu total",
-      "ticketsSold": "Billets vendus",
-      "exportCsv": "Exporter CSV",
-      "sendEmail": "Envoyer un email à tous",
-      "noEvents": "Aucun événement. Créez votre premier événement !",
-      "noAttendees": "Aucun participant pour le moment."
+    "mobileFriendly": {
+      "title": "Compatible mobile",
+      "description": "Inscrivez-vous et accédez à vos cours depuis n'importe quel appareil."
     }
+  },
+  "howItWorks": {
+    "sectionTitle": "Comment ça marche",
+    "sectionSubtitle": "Commencez en 3 étapes simples",
+    "step1": {
+      "title": "Parcourir les événements",
+      "description": "Explorez les cours en ligne et masterclasses à venir des meilleurs éducateurs."
+    },
+    "step2": {
+      "title": "Inscription et paiement",
+      "description": "Inscription rapide avec paiement sécurisé. Aucun compte nécessaire."
+    },
+    "step3": {
+      "title": "Rejoindre le cours",
+      "description": "Recevez votre lien d'accès par email et rejoignez la session en direct."
+    }
+  },
+  "testimonials": {
+    "sectionTitle": "Adoré par les étudiants",
+    "sectionSubtitle": "Découvrez ce que notre communauté en dit"
+  },
+  "faq": {
+    "sectionTitle": "Questions Fréquentes",
+    "sectionSubtitle": "Tout ce que vous devez savoir",
+    "items": [
+      {
+        "question": "Dois-je créer un compte ?",
+        "answer": "Non ! Entrez simplement votre nom et email lors de l'inscription. Votre lien d'accès sera envoyé directement à votre email."
+      },
+      {
+        "question": "Quels moyens de paiement sont acceptés ?",
+        "answer": "Nous acceptons toutes les principales cartes de crédit, Apple Pay et Google Pay via notre système de paiement sécurisé Stripe."
+      },
+      {
+        "question": "Comment accéder au cours en ligne ?",
+        "answer": "Après le paiement, vous recevrez un email avec les détails de l'événement et un lien direct pour rejoindre le cours en ligne (Zoom ou Google Meet)."
+      },
+      {
+        "question": "Puis-je obtenir un remboursement ?",
+        "answer": "Les politiques de remboursement varient selon l'événement. Veuillez contacter directement l'organisateur de l'événement."
+      },
+      {
+        "question": "Mes informations de paiement sont-elles sécurisées ?",
+        "answer": "Absolument ! Tous les paiements sont traités de manière sécurisée via Stripe. Nous ne stockons jamais les détails de votre carte."
+      }
+    ]
+  },
+  "cta": {
+    "title": "Prêt à apprendre ?",
+    "subtitle": "Parcourez nos événements à venir et inscrivez-vous à votre prochain cours en ligne.",
+    "primary": "Voir les événements",
+    "secondary": "Je suis éducateur"
+  },
+  "footer": {
+    "privacy": "Politique de confidentialité",
+    "terms": "Conditions d'utilisation",
+    "contact": "Contact",
+    "copyright": "© 2025 Uniflow. Conçu pour les universités."
+  },
+  "eventsPage": {
+    "title": "Explorer les événements",
+    "subtitle": "Découvrez les cours en ligne et masterclasses des meilleurs éducateurs",
+    "searchPlaceholder": "Rechercher par titre, sujet ou instructeur...",
+    "allLanguages": "Toutes les langues",
+    "english": "Anglais",
+    "french": "Français",
+    "allFormats": "Tous les formats",
+    "liveSession": "En direct",
+    "replay": "Replay",
+    "materialsOnly": "Supports uniquement",
+    "hybrid": "Hybride",
+    "allPrices": "Tous les prix",
+    "under10": "Moins de 10 €",
+    "range10to25": "10 € – 25 €",
+    "over25": "Plus de 25 €",
+    "dateSoonest": "Date (Plus proche)",
+    "dateLatest": "Date (Plus tard)",
+    "priceLow": "Prix (Croissant)",
+    "priceHigh": "Prix (Décroissant)",
+    "titleAZ": "Titre (A–Z)",
+    "clearFilters": "Effacer les filtres",
+    "eventsFound": "événements trouvés",
+    "eventFound": "événement trouvé",
+    "upcoming": "Événements à venir",
+    "past": "Événements passés",
+    "noEvents": "Aucun événement trouvé",
+    "noEventsHint": "Essayez d'ajuster votre recherche ou vos filtres",
+    "checkBack": "Revenez bientôt pour de nouveaux cours !",
+    "clearAll": "Effacer tous les filtres",
+    "eventEnded": "Événement terminé",
+    "registerNow": "S'inscrire →",
+    "viewDetails": "Voir les détails →",
+    "ticketOptions": "options de billets"
+  },
+  "eventDetail": {
+    "about": "À propos",
+    "whoIsThisFor": "Pour qui ?",
+    "bookYourSpot": "Réserver",
+    "continue": "Continuer",
+    "selectTicket": "Choisissez un ticket",
+    "pay": "Payer",
+    "by": "Par",
+    "live": "En direct",
+    "replay": "Replay",
+    "materials": "Supports uniquement",
+    "hybrid": "Live + Supports",
+    "eventNotFound": "Événement non trouvé",
+    "eventNotFoundDesc": "Ce lien ne correspond à aucun événement.",
+    "emailRestriction": "Seules les adresses @{domain} sont acceptées",
+    "enterEmailPrefix": "Veuillez entrer votre identifiant email",
+    "invalidEmail": "Veuillez entrer une adresse email valide",
+    "selectTicketError": "Veuillez sélectionner un ticket",
+    "paymentFailed": "Échec du paiement. Veuillez réessayer."
+  },
+  "event": {
+    "title": "Événement",
+    "description": "Description",
+    "dateAndTime": "Date & Heure",
+    "onlineClass": "Cours en ligne",
+    "spotsAvailable": "Places disponibles",
+    "soldOut": "Complet"
+  },
+  "registration": {
+    "title": "Inscription",
+    "name": "Prénom",
+    "surname": "Nom",
+    "email": "Email",
+    "namePlaceholder": "Entrez votre prénom",
+    "surnamePlaceholder": "Entrez votre nom",
+    "emailPlaceholder": "Entrez votre email",
+    "emailPrefixPlaceholder": "prenom.nom",
+    "proceedToPayment": "Procéder au paiement",
+    "termsNotice": "En vous inscrivant, vous acceptez de recevoir des emails liés à l'événement."
+  },
+  "success": {
+    "title": "🎉 Paiement réussi !",
+    "message": "Merci pour votre inscription.",
+    "emailNotice": "Vous recevrez un email de confirmation avec les détails de l'événement et votre lien d'accès.",
+    "checkSpam": "Veuillez vérifier votre boîte de réception (et les spams).",
+    "addToCalendar": "Ajouter au calendrier",
+    "home": "Retour à l'accueil",
+    "google": "Google Calendar",
+    "outlook": "Outlook",
+    "yahoo": "Yahoo Calendar",
+    "ics": "Télécharger le fichier .ics"
+  },
+  "admin": {
+    "dashboard": "Tableau de bord",
+    "events": "Événements",
+    "createEvent": "Créer un événement",
+    "attendees": "Participants",
+    "totalRevenue": "Revenu total",
+    "ticketsSold": "Billets vendus",
+    "exportCsv": "Exporter CSV",
+    "sendEmail": "Envoyer un email à tous",
+    "noEvents": "Aucun événement. Créez votre premier événement !",
+    "noAttendees": "Aucun participant pour le moment."
   }
+}

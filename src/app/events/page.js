@@ -6,8 +6,27 @@ import { useEffect, useState, useMemo } from 'react';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import Link from 'next/link';
+import PublicLayout from '@/components/layout/PublicLayout';
+import EventCard from '@/components/events/EventCard';
+import { useLocale } from '@/contexts/LocaleContext';
+
+function parseDate(timestamp) {
+  if (!timestamp) return new Date(0);
+  if (timestamp instanceof Date) return timestamp;
+  if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+  if (timestamp._seconds) return new Date(timestamp._seconds * 1000);
+  return new Date(timestamp);
+}
+
+function getLowestPrice(event) {
+  if (event.tickets && event.tickets.length > 0) {
+    return Math.min(...event.tickets.map((t) => t.price || 0));
+  }
+  return event.price || 0;
+}
 
 export default function EventsPage() {
+  const { locale, t } = useLocale();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,6 +34,9 @@ export default function EventsPage() {
   const [selectedFormat, setSelectedFormat] = useState('all');
   const [priceRange, setPriceRange] = useState('all');
   const [sortBy, setSortBy] = useState('date');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const ep = t.eventsPage || {};
 
   useEffect(() => {
     fetchEvents();
@@ -25,20 +47,13 @@ export default function EventsPage() {
       const eventsRef = collection(db, 'events');
       const eventsQuery = query(eventsRef, orderBy('createdAt', 'desc'));
       const eventsSnap = await getDocs(eventsQuery);
-      const eventsData = eventsSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const eventsData = eventsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setEvents(eventsData.filter((event) => event.status !== 'cancelled'));
-    } catch (error) {
-      console.error('Error fetching events:', error);
+    } catch {
       try {
         const eventsRef = collection(db, 'events');
         const eventsSnap = await getDocs(eventsRef);
-        const eventsData = eventsSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const eventsData = eventsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         setEvents(eventsData.filter((e) => e.status !== 'cancelled'));
       } catch (err) {
         console.error('Fallback query failed:', err);
@@ -48,39 +63,7 @@ export default function EventsPage() {
     }
   };
 
-  const parseDate = (timestamp) => {
-    if (!timestamp) return new Date(0);
-    if (timestamp instanceof Date) return timestamp;
-    if (typeof timestamp.toDate === 'function') return timestamp.toDate();
-    if (timestamp._seconds) return new Date(timestamp._seconds * 1000);
-    return new Date(timestamp);
-  };
-
-  const formatDate = (timestamp) => {
-    const date = parseDate(timestamp);
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const formatTime = (timestamp) => {
-    const date = parseDate(timestamp);
-    return date.toLocaleTimeString('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const isUpcoming = (timestamp) => parseDate(timestamp) > new Date();
-
-  const getLowestPrice = (event) => {
-    if (event.tickets && event.tickets.length > 0) {
-      return Math.min(...event.tickets.map((t) => t.price || 0));
-    }
-    return event.price || 0;
-  };
 
   const filteredEvents = useMemo(() => {
     let result = [...events];
@@ -95,12 +78,8 @@ export default function EventsPage() {
       });
     }
 
-    if (selectedLanguage !== 'all') {
-      result = result.filter((event) => event.language === selectedLanguage);
-    }
-    if (selectedFormat !== 'all') {
-      result = result.filter((event) => event.format === selectedFormat);
-    }
+    if (selectedLanguage !== 'all') result = result.filter((e) => e.language === selectedLanguage);
+    if (selectedFormat !== 'all') result = result.filter((e) => e.format === selectedFormat);
     if (priceRange !== 'all') {
       result = result.filter((event) => {
         const price = getLowestPrice(event);
@@ -115,11 +94,11 @@ export default function EventsPage() {
     }
 
     switch (sortBy) {
-      case 'date': result.sort((a, b) => parseDate(a.date) - parseDate(b.date)); break;
-      case 'date-desc': result.sort((a, b) => parseDate(b.date) - parseDate(a.date)); break;
-      case 'price': result.sort((a, b) => getLowestPrice(a) - getLowestPrice(b)); break;
+      case 'date':       result.sort((a, b) => parseDate(a.date) - parseDate(b.date)); break;
+      case 'date-desc':  result.sort((a, b) => parseDate(b.date) - parseDate(a.date)); break;
+      case 'price':      result.sort((a, b) => getLowestPrice(a) - getLowestPrice(b)); break;
       case 'price-desc': result.sort((a, b) => getLowestPrice(b) - getLowestPrice(a)); break;
-      case 'title': result.sort((a, b) => (a.title || '').localeCompare(b.title || '')); break;
+      case 'title':      result.sort((a, b) => (a.title || '').localeCompare(b.title || '')); break;
     }
 
     return result;
@@ -136,59 +115,53 @@ export default function EventsPage() {
     setSortBy('date');
   };
 
-  const hasActiveFilters =
-    searchTerm || selectedLanguage !== 'all' || selectedFormat !== 'all' || priceRange !== 'all';
+  const hasActiveFilters = searchTerm || selectedLanguage !== 'all' || selectedFormat !== 'all' || priceRange !== 'all';
+  const activeFilterCount = [
+    selectedLanguage !== 'all',
+    selectedFormat !== 'all',
+    priceRange !== 'all',
+    searchTerm.trim().length > 0,
+  ].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">U</span>
-              </div>
-              <span className="text-xl font-bold text-gray-900">Uniflow</span>
-            </Link>
-            <div className="hidden md:flex items-center gap-8">
-              <Link href="/" className="text-gray-600 hover:text-gray-900 transition-colors">Home</Link>
-              <Link href="/events" className="text-indigo-600 font-medium">Events</Link>
-              <Link href="/login" className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-                Admin Login
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="pt-24 pb-8 px-4 bg-gradient-to-b from-indigo-50 to-gray-50">
-        <div className="max-w-7xl mx-auto">
+    <PublicLayout>
+      {/* Hero */}
+      <section className="pt-8 pb-6 px-4" style={{ background: 'var(--gradient-hero)' }}>
+        <div className="container-wide">
           <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Explore Events</h1>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Discover online classes and masterclasses from top educators
+            <h1
+              className="text-4xl md:text-5xl font-bold mb-4"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {ep.title}
+            </h1>
+            <p
+              className="text-xl max-w-2xl mx-auto"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {ep.subtitle}
             </p>
           </div>
 
-          {/* Search Bar — no emoji icon */}
+          {/* Search bar */}
           <div className="max-w-2xl mx-auto">
             <div className="relative">
-              <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
               <input
                 type="text"
-                placeholder="Search by title, topic, or instructor..."
+                placeholder={ep.searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 text-lg border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm bg-white"
+                className="input pl-12 pr-4 py-4 text-lg"
+                style={{
+                  borderRadius: 'var(--radius-2xl)',
+                  boxShadow: 'var(--shadow-sm)',
+                }}
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2"
+                  style={{ color: 'var(--text-tertiary)' }}
                 >
                   ✕
                 </button>
@@ -198,95 +171,238 @@ export default function EventsPage() {
         </div>
       </section>
 
-      {/* Filters — no emojis */}
-      <section className="py-4 px-4 bg-white border-b border-gray-100 sticky top-16 z-40">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-wrap items-center gap-3">
-            <select
+      {/* ─── Sticky Filter Bar ─────────────────────────────── */}
+      <div
+        className="sticky z-40 border-b glass"
+        style={{
+          top: 'var(--nav-height)',
+          borderColor: 'var(--border-light)',
+        }}
+      >
+        <div className="container-wide px-4">
+          {/* Desktop — single compact row of chip selects */}
+          <div className="hidden md:flex items-center gap-2 py-3">
+            <FilterChip
               value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
-            >
-              <option value="all">All Languages</option>
-              <option value="en">English</option>
-              <option value="fr">French</option>
-            </select>
-
-            <select
+              onChange={setSelectedLanguage}
+              options={[
+                { value: 'all', label: ep.allLanguages || 'All Languages' },
+                { value: 'en', label: ep.english || 'English' },
+                { value: 'fr', label: ep.french || 'French' },
+              ]}
+              active={selectedLanguage !== 'all'}
+            />
+            <FilterChip
               value={selectedFormat}
-              onChange={(e) => setSelectedFormat(e.target.value)}
-              className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
-            >
-              <option value="all">All Formats</option>
-              <option value="live">Live Session</option>
-              <option value="replay">Replay</option>
-              <option value="materials">Materials Only</option>
-              <option value="hybrid">Hybrid</option>
-            </select>
-
-            <select
+              onChange={setSelectedFormat}
+              options={[
+                { value: 'all', label: ep.allFormats || 'All Formats' },
+                { value: 'live', label: ep.liveSession || 'Live Session' },
+                { value: 'replay', label: ep.replay || 'Replay' },
+                { value: 'materials', label: ep.materialsOnly || 'Materials Only' },
+                { value: 'hybrid', label: ep.hybrid || 'Hybrid' },
+              ]}
+              active={selectedFormat !== 'all'}
+            />
+            <FilterChip
               value={priceRange}
-              onChange={(e) => setPriceRange(e.target.value)}
-              className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
-            >
-              <option value="all">All Prices</option>
-              <option value="free">Free</option>
-              <option value="under10">Under €10</option>
-              <option value="10to25">€10 – €25</option>
-              <option value="over25">Over €25</option>
-            </select>
+              onChange={setPriceRange}
+              options={[
+                { value: 'all', label: ep.allPrices || 'All Prices' },
+                { value: 'free', label: t.common?.free || 'Free' },
+                { value: 'under10', label: ep.under10 || 'Under €10' },
+                { value: '10to25', label: ep.range10to25 || '€10 – €25' },
+                { value: 'over25', label: ep.over25 || 'Over €25' },
+              ]}
+              active={priceRange !== 'all'}
+            />
 
-            <select
+            {/* Divider */}
+            <div
+              className="w-px h-6 mx-1"
+              style={{ backgroundColor: 'var(--border-default)' }}
+            />
+
+            {/* Sort */}
+            <FilterChip
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
-            >
-              <option value="date">Date (Soonest)</option>
-              <option value="date-desc">Date (Latest)</option>
-              <option value="price">Price (Low to High)</option>
-              <option value="price-desc">Price (High to Low)</option>
-              <option value="title">Title (A–Z)</option>
-            </select>
+              onChange={setSortBy}
+              options={[
+                { value: 'date', label: ep.dateSoonest || 'Date (Soonest)' },
+                { value: 'date-desc', label: ep.dateLatest || 'Date (Latest)' },
+                { value: 'price', label: ep.priceLow || 'Price (Low)' },
+                { value: 'price-desc', label: ep.priceHigh || 'Price (High)' },
+                { value: 'title', label: ep.titleAZ || 'Title (A–Z)' },
+              ]}
+              active={false}
+            />
 
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                Clear Filters
+              <button
+                onClick={clearFilters}
+                className="ml-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+                style={{
+                  color: 'var(--color-error)',
+                  backgroundColor: 'rgba(239,68,68,0.08)',
+                }}
+              >
+                ✕ {ep.clearFilters || 'Clear'}
               </button>
             )}
 
-            <div className="ml-auto text-sm text-gray-500">
-              {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''} found
-            </div>
+            <span
+              className="ml-auto text-xs font-medium tabular-nums"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              {filteredEvents.length}{' '}
+              {filteredEvents.length !== 1 ? ep.eventsFound || 'events' : ep.eventFound || 'event'}
+            </span>
           </div>
-        </div>
-      </section>
 
-      {/* Events Grid */}
-      <section className="py-8 px-4">
-        <div className="max-w-7xl mx-auto">
+          {/* Mobile — toggle button row */}
+          <div className="flex md:hidden items-center justify-between py-3">
+            <button
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: hasActiveFilters
+                  ? 'var(--color-primary-50)'
+                  : 'var(--bg-tertiary)',
+                color: hasActiveFilters
+                  ? 'var(--color-primary-700)'
+                  : 'var(--text-secondary)',
+              }}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+              </svg>
+              {locale === 'fr' ? 'Filtres' : 'Filters'}
+              {activeFilterCount > 0 && (
+                <span
+                  className="w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center text-white"
+                  style={{ backgroundColor: 'var(--color-primary-600)' }}
+                >
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            <span
+              className="text-xs font-medium tabular-nums"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              {filteredEvents.length}{' '}
+              {filteredEvents.length !== 1 ? ep.eventsFound || 'events' : ep.eventFound || 'event'}
+            </span>
+          </div>
+
+          {/* Mobile — expanded filter grid */}
+          {showMobileFilters && (
+            <div
+              className="md:hidden pb-4 pt-1 space-y-2 border-t"
+              style={{ borderColor: 'var(--border-light)' }}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="input select text-sm py-2.5"
+                >
+                  <option value="all">{ep.allLanguages || 'All Languages'}</option>
+                  <option value="en">{ep.english || 'English'}</option>
+                  <option value="fr">{ep.french || 'French'}</option>
+                </select>
+
+                <select
+                  value={selectedFormat}
+                  onChange={(e) => setSelectedFormat(e.target.value)}
+                  className="input select text-sm py-2.5"
+                >
+                  <option value="all">{ep.allFormats || 'All Formats'}</option>
+                  <option value="live">{ep.liveSession || 'Live'}</option>
+                  <option value="replay">{ep.replay || 'Replay'}</option>
+                  <option value="materials">{ep.materialsOnly || 'Materials'}</option>
+                  <option value="hybrid">{ep.hybrid || 'Hybrid'}</option>
+                </select>
+
+                <select
+                  value={priceRange}
+                  onChange={(e) => setPriceRange(e.target.value)}
+                  className="input select text-sm py-2.5"
+                >
+                  <option value="all">{ep.allPrices || 'All Prices'}</option>
+                  <option value="free">{t.common?.free || 'Free'}</option>
+                  <option value="under10">{ep.under10 || 'Under €10'}</option>
+                  <option value="10to25">{ep.range10to25 || '€10 – €25'}</option>
+                  <option value="over25">{ep.over25 || 'Over €25'}</option>
+                </select>
+
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="input select text-sm py-2.5"
+                >
+                  <option value="date">{ep.dateSoonest || 'Soonest'}</option>
+                  <option value="date-desc">{ep.dateLatest || 'Latest'}</option>
+                  <option value="price">{ep.priceLow || 'Price ↑'}</option>
+                  <option value="price-desc">{ep.priceHigh || 'Price ↓'}</option>
+                  <option value="title">{ep.titleAZ || 'A–Z'}</option>
+                </select>
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="w-full py-2 text-xs font-medium rounded-lg transition-colors"
+                  style={{
+                    color: 'var(--color-error)',
+                    backgroundColor: 'rgba(239,68,68,0.08)',
+                  }}
+                >
+                  ✕ {ep.clearAll || 'Clear All Filters'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Events Grid ───────────────────────────────────── */}
+      <section className="section px-4" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+        <div className="container-wide">
           {loading ? (
             <div className="flex justify-center py-20">
-              <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              <div
+                className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin"
+                style={{
+                  borderColor: 'var(--color-primary-500)',
+                  borderTopColor: 'transparent',
+                }}
+              />
             </div>
           ) : filteredEvents.length > 0 ? (
             <div className="space-y-12">
               {upcomingEvents.length > 0 && (
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                    <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
-                    Upcoming Events
-                    <span className="text-sm font-normal text-gray-500">({upcomingEvents.length})</span>
+                  <h2
+                    className="text-2xl font-bold mb-6 flex items-center gap-2"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full animate-pulse"
+                      style={{ backgroundColor: 'var(--color-success)' }}
+                    />
+                    {ep.upcoming}
+                    <span
+                      className="text-sm font-normal"
+                      style={{ color: 'var(--text-tertiary)' }}
+                    >
+                      ({upcomingEvents.length})
+                    </span>
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {upcomingEvents.map((event) => (
-                      <EventCard
-                        key={event.id}
-                        event={event}
-                        formatDate={formatDate}
-                        formatTime={formatTime}
-                        getLowestPrice={getLowestPrice}
-                        isUpcoming={true}
-                      />
+                      <EventCard key={event.id} event={event} isUpcoming />
                     ))}
                   </div>
                 </div>
@@ -294,21 +410,25 @@ export default function EventsPage() {
 
               {pastEvents.length > 0 && (
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                    <span className="w-3 h-3 bg-gray-400 rounded-full"></span>
-                    Past Events
-                    <span className="text-sm font-normal text-gray-500">({pastEvents.length})</span>
+                  <h2
+                    className="text-2xl font-bold mb-6 flex items-center gap-2"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: 'var(--text-tertiary)' }}
+                    />
+                    {ep.past}
+                    <span
+                      className="text-sm font-normal"
+                      style={{ color: 'var(--text-tertiary)' }}
+                    >
+                      ({pastEvents.length})
+                    </span>
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {pastEvents.map((event) => (
-                      <EventCard
-                        key={event.id}
-                        event={event}
-                        formatDate={formatDate}
-                        formatTime={formatTime}
-                        getLowestPrice={getLowestPrice}
-                        isUpcoming={false}
-                      />
+                      <EventCard key={event.id} event={event} isUpcoming={false} />
                     ))}
                   </div>
                 </div>
@@ -316,131 +436,73 @@ export default function EventsPage() {
             </div>
           ) : (
             <div className="text-center py-20">
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No events found</h3>
-              <p className="text-gray-500 mb-6">
-                {hasActiveFilters ? 'Try adjusting your search or filters' : 'Check back soon for new classes!'}
+              <div
+                className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+                style={{ backgroundColor: 'var(--bg-tertiary)' }}
+              >
+                <svg
+                  className="w-8 h-8"
+                  style={{ color: 'var(--text-tertiary)' }}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+              </div>
+              <h3
+                className="text-xl font-semibold mb-2"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {ep.noEvents}
+              </h3>
+              <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
+                {hasActiveFilters ? ep.noEventsHint : ep.checkBack}
               </p>
               {hasActiveFilters && (
-                <button onClick={clearFilters} className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-                  Clear All Filters
+                <button onClick={clearFilters} className="btn btn-primary btn-md">
+                  {ep.clearAll}
                 </button>
               )}
             </div>
           )}
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="py-8 px-4 bg-white border-t border-gray-100">
-        <div className="max-w-7xl mx-auto text-center text-gray-500 text-sm">
-          <p>© 2025 Uniflow. Made for universities.</p>
-        </div>
-      </footer>
-    </div>
+    </PublicLayout>
   );
 }
 
-// Event Card Component — taller banner, no emojis, no logo
-function EventCard({ event, formatDate, formatTime, getLowestPrice, isUpcoming }) {
-  const price = getLowestPrice(event);
-  const hasMultipleTickets = event.tickets && event.tickets.length > 1;
-
+/* ─── FilterChip — compact pill-style dropdown ─────────────── */
+function FilterChip({ value, onChange, options, active }) {
   return (
-    <Link
-      href={`/e/${event.slug}`}
-      className={`group bg-white rounded-2xl border overflow-hidden transition-all ${
-        isUpcoming
-          ? 'border-gray-100 hover:shadow-xl hover:border-indigo-100'
-          : 'border-gray-100 opacity-75 hover:opacity-100'
-      }`}
-    >
-      {/* Event Banner — object-contain so full image shows */}
-      <div className="h-52 bg-white relative overflow-hidden">
-        {event.bannerUrl ? (
-          <img
-            src={event.bannerUrl}
-            alt={event.title}
-            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-gray-800 via-gray-900 to-black" />
-        )}
-
-        {/* Past Event Overlay */}
-        {!isUpcoming && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <span className="px-4 py-2 bg-black/60 text-white text-sm font-medium rounded-full">
-              Event Ended
-            </span>
-          </div>
-        )}
-
-        {/* Price Badge */}
-        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full">
-          {price === 0 ? (
-            <span className="font-bold text-green-600">Free</span>
-          ) : (
-            <span className="font-bold text-gray-900">
-              {hasMultipleTickets && 'From '}
-              {price} €
-            </span>
-          )}
-        </div>
-
-        {/* Language & Format Badges — text only, no emojis */}
-        <div className="absolute top-3 left-3 flex gap-2">
-          <span className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-medium text-gray-700">
-            {event.language === 'fr' ? 'FR' : 'EN'}
-          </span>
-          {event.format && (
-            <span className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-medium text-gray-700 inline-flex items-center gap-1.5">
-              {event.format === 'live' && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />}
-              {event.format === 'live' && 'Live'}
-              {event.format === 'replay' && 'Replay'}
-              {event.format === 'materials' && 'Materials'}
-              {event.format === 'hybrid' && 'Hybrid'}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Event Info */}
-      <div className="p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
-          {event.title}
-        </h3>
-
-        {event.organizer && (
-          <p className="text-sm text-indigo-600 mb-2">{event.organizer}</p>
-        )}
-
-        {/* Date & Time — clean text, no emojis */}
-        <div className="flex items-center gap-3 text-sm text-gray-500 mb-3">
-          <span>{formatDate(event.date)}</span>
-          <span className="text-gray-300">|</span>
-          <span>{formatTime(event.date)}</span>
-        </div>
-
-        <p className="text-gray-600 text-sm line-clamp-2 mb-4">
-          {event.description || 'Join this amazing online class!'}
-        </p>
-
-        {/* CTA */}
-        <div className="flex items-center justify-between">
-          <span
-            className={`font-medium ${
-              isUpcoming ? 'text-indigo-600 group-hover:underline' : 'text-gray-400'
-            }`}
-          >
-            {isUpcoming ? 'Register Now →' : 'View Details →'}
-          </span>
-          {hasMultipleTickets && (
-            <span className="text-xs text-gray-400">
-              {event.tickets.length} ticket options
-            </span>
-          )}
-        </div>
-      </div>
-    </Link>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none cursor-pointer text-[13px] font-medium pl-3 pr-7 py-2 rounded-lg border outline-none transition-all"
+        style={{
+          backgroundColor: active ? 'var(--color-primary-50)' : 'var(--bg-primary)',
+          borderColor: active ? 'var(--color-primary-200)' : 'var(--border-default)',
+          color: active ? 'var(--color-primary-700)' : 'var(--text-secondary)',
+        }}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <svg
+        className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none"
+        style={{ color: active ? 'var(--color-primary-500)' : 'var(--text-tertiary)' }}
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth="2.5"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
+    </div>
   );
 }

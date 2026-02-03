@@ -1,55 +1,215 @@
 {
-    "common": {
-      "bookNow": "Book Now",
-      "price": "Price",
-      "date": "Date",
-      "time": "Time",
-      "language": "Language",
-      "loading": "Loading...",
-      "error": "An error occurred",
-      "success": "Success!",
-      "cancel": "Cancel",
-      "save": "Save",
-      "delete": "Delete",
-      "edit": "Edit",
-      "back": "Back",
-      "next": "Next",
-      "submit": "Submit"
+  "common": {
+    "bookNow": "Book Now",
+    "price": "Price",
+    "date": "Date",
+    "time": "Time",
+    "language": "Language",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Success!",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "viewAll": "View All",
+    "learnMore": "Learn More",
+    "free": "Free",
+    "from": "From",
+    "poweredBy": "Powered by Uniflow"
+  },
+  "nav": {
+    "home": "Home",
+    "events": "Events",
+    "howItWorks": "How it Works",
+    "faq": "FAQ",
+    "adminLogin": "Admin Login",
+    "login": "Login"
+  },
+  "hero": {
+    "badge": "Now available for universities",
+    "titleLine1": "Online Classes,",
+    "titleHighlight": "Made Simple",
+    "subtitle": "The easiest way for students to discover and pay for premium online masterclasses. No account needed.",
+    "ctaPrimary": "See All Events",
+    "ctaSecondary": "How it Works",
+    "socialProof": "500+ students registered",
+    "rating": "4.9/5 rating"
+  },
+  "features": {
+    "sectionTitle": "Everything you need for online classes",
+    "sectionSubtitle": "A seamless experience for students and educators alike",
+    "instantAccess": {
+      "title": "Instant Access",
+      "description": "Pay once, get immediate access to your online class link via email."
     },
-    "event": {
-      "title": "Event",
-      "description": "Description",
-      "dateAndTime": "Date & Time",
-      "onlineClass": "Online Class",
-      "spotsAvailable": "Spots available",
-      "soldOut": "Sold Out"
+    "securePayments": {
+      "title": "Secure Payments",
+      "description": "Powered by Stripe with support for cards, Apple Pay & Google Pay."
     },
-    "registration": {
-      "title": "Registration",
-      "name": "First Name",
-      "surname": "Last Name",
-      "email": "Email",
-      "namePlaceholder": "Enter your first name",
-      "surnamePlaceholder": "Enter your last name",
-      "emailPlaceholder": "Enter your email",
-      "proceedToPayment": "Proceed to Payment",
-      "termsNotice": "By registering, you agree to receive event-related emails."
-    },
-    "success": {
-      "title": "Payment Successful!",
-      "message": "Thank you for your registration. You will receive a confirmation email shortly with the event details and access link.",
-      "checkEmail": "Please check your email inbox (and spam folder)."
-    },
-    "admin": {
-      "dashboard": "Dashboard",
-      "events": "Events",
-      "createEvent": "Create Event",
-      "attendees": "Attendees",
-      "totalRevenue": "Total Revenue",
-      "ticketsSold": "Tickets Sold",
-      "exportCsv": "Export CSV",
-      "sendEmail": "Send Email to All",
-      "noEvents": "No events yet. Create your first event!",
-      "noAttendees": "No attendees yet."
+    "mobileFriendly": {
+      "title": "Mobile Friendly",
+      "description": "Register and access your classes from any device, anywhere."
     }
+  },
+  "howItWorks": {
+    "sectionTitle": "How it works",
+    "sectionSubtitle": "Get started in 3 simple steps",
+    "step1": {
+      "title": "Browse Events",
+      "description": "Explore upcoming online classes and masterclasses from top educators."
+    },
+    "step2": {
+      "title": "Register & Pay",
+      "description": "Quick registration with secure payment. No account needed."
+    },
+    "step3": {
+      "title": "Join the Class",
+      "description": "Receive your access link by email and join the live session."
+    }
+  },
+  "testimonials": {
+    "sectionTitle": "Loved by students",
+    "sectionSubtitle": "See what our community has to say"
+  },
+  "faq": {
+    "sectionTitle": "Frequently Asked Questions",
+    "sectionSubtitle": "Everything you need to know",
+    "items": [
+      {
+        "question": "Do I need to create an account?",
+        "answer": "No! Simply enter your name and email during registration. Your access link will be sent directly to your email."
+      },
+      {
+        "question": "What payment methods are accepted?",
+        "answer": "We accept all major credit cards, Apple Pay, and Google Pay through our secure Stripe payment system."
+      },
+      {
+        "question": "How do I access the online class?",
+        "answer": "After payment, you'll receive an email with the event details and a direct link to join the online class (Zoom or Google Meet)."
+      },
+      {
+        "question": "Can I get a refund?",
+        "answer": "Refund policies vary by event. Please contact the event organizer directly for refund requests."
+      },
+      {
+        "question": "Is my payment information secure?",
+        "answer": "Absolutely! All payments are processed securely through Stripe. We never store your card details."
+      }
+    ]
+  },
+  "cta": {
+    "title": "Ready to start learning?",
+    "subtitle": "Browse our upcoming events and register for your next online class today.",
+    "primary": "See All Events",
+    "secondary": "I'm an Educator"
+  },
+  "footer": {
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "contact": "Contact",
+    "copyright": "© 2025 Uniflow. Made for universities."
+  },
+  "eventsPage": {
+    "title": "Explore Events",
+    "subtitle": "Discover online classes and masterclasses from top educators",
+    "searchPlaceholder": "Search by title, topic, or instructor...",
+    "allLanguages": "All Languages",
+    "english": "English",
+    "french": "French",
+    "allFormats": "All Formats",
+    "liveSession": "Live Session",
+    "replay": "Replay",
+    "materialsOnly": "Materials Only",
+    "hybrid": "Hybrid",
+    "allPrices": "All Prices",
+    "under10": "Under €10",
+    "range10to25": "€10 – €25",
+    "over25": "Over €25",
+    "dateSoonest": "Date (Soonest)",
+    "dateLatest": "Date (Latest)",
+    "priceLow": "Price (Low to High)",
+    "priceHigh": "Price (High to Low)",
+    "titleAZ": "Title (A–Z)",
+    "clearFilters": "Clear Filters",
+    "eventsFound": "events found",
+    "eventFound": "event found",
+    "upcoming": "Upcoming Events",
+    "past": "Past Events",
+    "noEvents": "No events found",
+    "noEventsHint": "Try adjusting your search or filters",
+    "checkBack": "Check back soon for new classes!",
+    "clearAll": "Clear All Filters",
+    "eventEnded": "Event Ended",
+    "registerNow": "Register Now →",
+    "viewDetails": "View Details →",
+    "ticketOptions": "ticket options"
+  },
+  "eventDetail": {
+    "about": "About",
+    "whoIsThisFor": "Who is this for?",
+    "bookYourSpot": "Book your spot",
+    "continue": "Continue",
+    "selectTicket": "Select a ticket",
+    "pay": "Pay",
+    "by": "By",
+    "live": "Live Session",
+    "replay": "Replay",
+    "materials": "Materials Only",
+    "hybrid": "Live + Materials",
+    "eventNotFound": "Event not found",
+    "eventNotFoundDesc": "This link doesn't match any event.",
+    "emailRestriction": "Only @{domain} addresses accepted",
+    "enterEmailPrefix": "Please enter your email prefix",
+    "invalidEmail": "Please enter a valid email address",
+    "selectTicketError": "Please select a ticket",
+    "paymentFailed": "Failed to proceed to payment. Please try again."
+  },
+  "event": {
+    "title": "Event",
+    "description": "Description",
+    "dateAndTime": "Date & Time",
+    "onlineClass": "Online Class",
+    "spotsAvailable": "Spots available",
+    "soldOut": "Sold Out"
+  },
+  "registration": {
+    "title": "Registration",
+    "name": "First Name",
+    "surname": "Last Name",
+    "email": "Email",
+    "namePlaceholder": "Enter your first name",
+    "surnamePlaceholder": "Enter your last name",
+    "emailPlaceholder": "Enter your email",
+    "emailPrefixPlaceholder": "firstname.lastname",
+    "proceedToPayment": "Proceed to Payment",
+    "termsNotice": "By registering, you agree to receive event-related emails."
+  },
+  "success": {
+    "title": "🎉 Payment Successful!",
+    "message": "Thank you for your registration.",
+    "emailNotice": "You will receive a confirmation email shortly with the event details and your access link.",
+    "checkSpam": "Please check your inbox (and spam folder).",
+    "addToCalendar": "Add to Calendar",
+    "home": "Back to Home",
+    "google": "Google Calendar",
+    "outlook": "Outlook",
+    "yahoo": "Yahoo Calendar",
+    "ics": "Download .ics File"
+  },
+  "admin": {
+    "dashboard": "Dashboard",
+    "events": "Events",
+    "createEvent": "Create Event",
+    "attendees": "Attendees",
+    "totalRevenue": "Total Revenue",
+    "ticketsSold": "Tickets Sold",
+    "exportCsv": "Export CSV",
+    "sendEmail": "Send Email to All",
+    "noEvents": "No events yet. Create your first event!",
+    "noAttendees": "No attendees yet."
   }
+}
