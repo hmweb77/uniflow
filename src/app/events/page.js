@@ -29,14 +29,9 @@ export default function EventsPage() {
         id: doc.id,
         ...doc.data(),
       }));
-      // Filter out cancelled events
-      const publishedEvents = eventsData.filter(
-        (event) => event.status !== 'cancelled'
-      );
-      setEvents(publishedEvents);
+      setEvents(eventsData.filter((event) => event.status !== 'cancelled'));
     } catch (error) {
       console.error('Error fetching events:', error);
-      // Fallback without ordering
       try {
         const eventsRef = collection(db, 'events');
         const eventsSnap = await getDocs(eventsRef);
@@ -53,7 +48,6 @@ export default function EventsPage() {
     }
   };
 
-  // Parse date from various formats
   const parseDate = (timestamp) => {
     if (!timestamp) return new Date(0);
     if (timestamp instanceof Date) return timestamp;
@@ -62,7 +56,6 @@ export default function EventsPage() {
     return new Date(timestamp);
   };
 
-  // Format date for display
   const formatDate = (timestamp) => {
     const date = parseDate(timestamp);
     return date.toLocaleDateString('en-GB', {
@@ -72,7 +65,6 @@ export default function EventsPage() {
     });
   };
 
-  // Format time for display
   const formatTime = (timestamp) => {
     const date = parseDate(timestamp);
     return date.toLocaleTimeString('en-GB', {
@@ -81,13 +73,8 @@ export default function EventsPage() {
     });
   };
 
-  // Check if event is upcoming
-  const isUpcoming = (timestamp) => {
-    const eventDate = parseDate(timestamp);
-    return eventDate > new Date();
-  };
+  const isUpcoming = (timestamp) => parseDate(timestamp) > new Date();
 
-  // Get lowest price from tickets or legacy price
   const getLowestPrice = (event) => {
     if (event.tickets && event.tickets.length > 0) {
       return Math.min(...event.tickets.map((t) => t.price || 0));
@@ -95,79 +82,49 @@ export default function EventsPage() {
     return event.price || 0;
   };
 
-  // Filter and sort events
   const filteredEvents = useMemo(() => {
     let result = [...events];
 
-    // Search filter (title and description)
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
       result = result.filter((event) => {
         const title = (event.title || '').toLowerCase();
         const description = (event.description || '').toLowerCase();
         const organizer = (event.organizer || '').toLowerCase();
-        return (
-          title.includes(search) ||
-          description.includes(search) ||
-          organizer.includes(search)
-        );
+        return title.includes(search) || description.includes(search) || organizer.includes(search);
       });
     }
 
-    // Language filter
     if (selectedLanguage !== 'all') {
       result = result.filter((event) => event.language === selectedLanguage);
     }
-
-    // Format filter
     if (selectedFormat !== 'all') {
       result = result.filter((event) => event.format === selectedFormat);
     }
-
-    // Price filter
     if (priceRange !== 'all') {
       result = result.filter((event) => {
         const price = getLowestPrice(event);
         switch (priceRange) {
-          case 'free':
-            return price === 0;
-          case 'under10':
-            return price > 0 && price < 10;
-          case '10to25':
-            return price >= 10 && price <= 25;
-          case 'over25':
-            return price > 25;
-          default:
-            return true;
+          case 'free': return price === 0;
+          case 'under10': return price > 0 && price < 10;
+          case '10to25': return price >= 10 && price <= 25;
+          case 'over25': return price > 25;
+          default: return true;
         }
       });
     }
 
-    // Sort
     switch (sortBy) {
-      case 'date':
-        result.sort((a, b) => parseDate(a.date) - parseDate(b.date));
-        break;
-      case 'date-desc':
-        result.sort((a, b) => parseDate(b.date) - parseDate(a.date));
-        break;
-      case 'price':
-        result.sort((a, b) => getLowestPrice(a) - getLowestPrice(b));
-        break;
-      case 'price-desc':
-        result.sort((a, b) => getLowestPrice(b) - getLowestPrice(a));
-        break;
-      case 'title':
-        result.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-        break;
-      default:
-        break;
+      case 'date': result.sort((a, b) => parseDate(a.date) - parseDate(b.date)); break;
+      case 'date-desc': result.sort((a, b) => parseDate(b.date) - parseDate(a.date)); break;
+      case 'price': result.sort((a, b) => getLowestPrice(a) - getLowestPrice(b)); break;
+      case 'price-desc': result.sort((a, b) => getLowestPrice(b) - getLowestPrice(a)); break;
+      case 'title': result.sort((a, b) => (a.title || '').localeCompare(b.title || '')); break;
     }
 
     return result;
   }, [events, searchTerm, selectedLanguage, selectedFormat, priceRange, sortBy]);
 
-  // Separate upcoming and past events
   const upcomingEvents = filteredEvents.filter((e) => isUpcoming(e.date));
   const pastEvents = filteredEvents.filter((e) => !isUpcoming(e.date));
 
@@ -180,10 +137,7 @@ export default function EventsPage() {
   };
 
   const hasActiveFilters =
-    searchTerm ||
-    selectedLanguage !== 'all' ||
-    selectedFormat !== 'all' ||
-    priceRange !== 'all';
+    searchTerm || selectedLanguage !== 'all' || selectedFormat !== 'all' || priceRange !== 'all';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -198,22 +152,9 @@ export default function EventsPage() {
               <span className="text-xl font-bold text-gray-900">Uniflow</span>
             </Link>
             <div className="hidden md:flex items-center gap-8">
-              <Link
-                href="/"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Home
-              </Link>
-              <Link
-                href="/events"
-                className="text-indigo-600 font-medium"
-              >
-                Events
-              </Link>
-              <Link
-                href="/login"
-                className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-              >
+              <Link href="/" className="text-gray-600 hover:text-gray-900 transition-colors">Home</Link>
+              <Link href="/events" className="text-indigo-600 font-medium">Events</Link>
+              <Link href="/login" className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
                 Admin Login
               </Link>
             </div>
@@ -225,20 +166,18 @@ export default function EventsPage() {
       <section className="pt-24 pb-8 px-4 bg-gradient-to-b from-indigo-50 to-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Explore Events
-            </h1>
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Explore Events</h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               Discover online classes and masterclasses from top educators
             </p>
           </div>
 
-          {/* Search Bar */}
+          {/* Search Bar — no emoji icon */}
           <div className="max-w-2xl mx-auto">
             <div className="relative">
-              <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xl">
-                🔍
-              </span>
+              <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
               <input
                 type="text"
                 placeholder="Search by title, topic, or instructor..."
@@ -249,7 +188,7 @@ export default function EventsPage() {
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   ✕
                 </button>
@@ -259,71 +198,62 @@ export default function EventsPage() {
         </div>
       </section>
 
-      {/* Filters */}
+      {/* Filters — no emojis */}
       <section className="py-4 px-4 bg-white border-b border-gray-100 sticky top-16 z-40">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center gap-3">
-            {/* Language Filter */}
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
               className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
             >
-              <option value="all">🌐 All Languages</option>
-              <option value="en">🇬🇧 English</option>
-              <option value="fr">🇫🇷 French</option>
+              <option value="all">All Languages</option>
+              <option value="en">English</option>
+              <option value="fr">French</option>
             </select>
 
-            {/* Format Filter */}
             <select
               value={selectedFormat}
               onChange={(e) => setSelectedFormat(e.target.value)}
               className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
             >
-              <option value="all">📺 All Formats</option>
-              <option value="live">🔴 Live Session</option>
-              <option value="replay">📹 Replay</option>
-              <option value="materials">📄 Materials Only</option>
-              <option value="hybrid">🎯 Hybrid</option>
+              <option value="all">All Formats</option>
+              <option value="live">Live Session</option>
+              <option value="replay">Replay</option>
+              <option value="materials">Materials Only</option>
+              <option value="hybrid">Hybrid</option>
             </select>
 
-            {/* Price Filter */}
             <select
               value={priceRange}
               onChange={(e) => setPriceRange(e.target.value)}
               className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
             >
-              <option value="all">💰 All Prices</option>
+              <option value="all">All Prices</option>
               <option value="free">Free</option>
               <option value="under10">Under €10</option>
-              <option value="10to25">€10 - €25</option>
+              <option value="10to25">€10 – €25</option>
               <option value="over25">Over €25</option>
             </select>
 
-            {/* Sort */}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
             >
-              <option value="date">📅 Date (Soonest)</option>
-              <option value="date-desc">📅 Date (Latest)</option>
-              <option value="price">💵 Price (Low to High)</option>
-              <option value="price-desc">💵 Price (High to Low)</option>
-              <option value="title">🔤 Title (A-Z)</option>
+              <option value="date">Date (Soonest)</option>
+              <option value="date-desc">Date (Latest)</option>
+              <option value="price">Price (Low to High)</option>
+              <option value="price-desc">Price (High to Low)</option>
+              <option value="title">Title (A–Z)</option>
             </select>
 
-            {/* Clear Filters */}
             {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              >
+              <button onClick={clearFilters} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                 Clear Filters
               </button>
             )}
 
-            {/* Results Count */}
             <div className="ml-auto text-sm text-gray-500">
               {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''} found
             </div>
@@ -340,15 +270,12 @@ export default function EventsPage() {
             </div>
           ) : filteredEvents.length > 0 ? (
             <div className="space-y-12">
-              {/* Upcoming Events */}
               {upcomingEvents.length > 0 && (
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                     <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
                     Upcoming Events
-                    <span className="text-sm font-normal text-gray-500">
-                      ({upcomingEvents.length})
-                    </span>
+                    <span className="text-sm font-normal text-gray-500">({upcomingEvents.length})</span>
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {upcomingEvents.map((event) => (
@@ -365,15 +292,12 @@ export default function EventsPage() {
                 </div>
               )}
 
-              {/* Past Events */}
               {pastEvents.length > 0 && (
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                     <span className="w-3 h-3 bg-gray-400 rounded-full"></span>
                     Past Events
-                    <span className="text-sm font-normal text-gray-500">
-                      ({pastEvents.length})
-                    </span>
+                    <span className="text-sm font-normal text-gray-500">({pastEvents.length})</span>
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {pastEvents.map((event) => (
@@ -392,20 +316,12 @@ export default function EventsPage() {
             </div>
           ) : (
             <div className="text-center py-20">
-              <div className="text-6xl mb-4">🔍</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                No events found
-              </h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No events found</h3>
               <p className="text-gray-500 mb-6">
-                {hasActiveFilters
-                  ? 'Try adjusting your search or filters'
-                  : 'Check back soon for new classes!'}
+                {hasActiveFilters ? 'Try adjusting your search or filters' : 'Check back soon for new classes!'}
               </p>
               {hasActiveFilters && (
-                <button
-                  onClick={clearFilters}
-                  className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                >
+                <button onClick={clearFilters} className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
                   Clear All Filters
                 </button>
               )}
@@ -424,7 +340,7 @@ export default function EventsPage() {
   );
 }
 
-// Event Card Component
+// Event Card Component — taller banner, no emojis, no logo
 function EventCard({ event, formatDate, formatTime, getLowestPrice, isUpcoming }) {
   const price = getLowestPrice(event);
   const hasMultipleTickets = event.tickets && event.tickets.length > 1;
@@ -438,19 +354,16 @@ function EventCard({ event, formatDate, formatTime, getLowestPrice, isUpcoming }
           : 'border-gray-100 opacity-75 hover:opacity-100'
       }`}
     >
-      {/* Event Banner */}
-      <div className="h-44 bg-gradient-to-br from-indigo-400 to-purple-500 relative overflow-hidden">
+      {/* Event Banner — object-contain so full image shows */}
+      <div className="h-52 bg-white relative overflow-hidden">
         {event.bannerUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={event.bannerUrl}
             alt={event.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-6xl opacity-50">🎓</span>
-          </div>
+          <div className="w-full h-full bg-gradient-to-br from-gray-800 via-gray-900 to-black" />
         )}
 
         {/* Past Event Overlay */}
@@ -474,17 +387,18 @@ function EventCard({ event, formatDate, formatTime, getLowestPrice, isUpcoming }
           )}
         </div>
 
-        {/* Language & Format Badges */}
+        {/* Language & Format Badges — text only, no emojis */}
         <div className="absolute top-3 left-3 flex gap-2">
-          <span className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-sm">
-            {event.language === 'fr' ? '🇫🇷' : '🇬🇧'}
+          <span className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-medium text-gray-700">
+            {event.language === 'fr' ? 'FR' : 'EN'}
           </span>
           {event.format && (
-            <span className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-medium">
-              {event.format === 'live' && '🔴 Live'}
-              {event.format === 'replay' && '📹 Replay'}
-              {event.format === 'materials' && '📄 Materials'}
-              {event.format === 'hybrid' && '🎯 Hybrid'}
+            <span className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-medium text-gray-700 inline-flex items-center gap-1.5">
+              {event.format === 'live' && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />}
+              {event.format === 'live' && 'Live'}
+              {event.format === 'replay' && 'Replay'}
+              {event.format === 'materials' && 'Materials'}
+              {event.format === 'hybrid' && 'Hybrid'}
             </span>
           )}
         </div>
@@ -496,24 +410,17 @@ function EventCard({ event, formatDate, formatTime, getLowestPrice, isUpcoming }
           {event.title}
         </h3>
 
-        {/* Organizer */}
         {event.organizer && (
-          <p className="text-sm text-indigo-600 mb-2">
-            👤 {event.organizer}
-          </p>
+          <p className="text-sm text-indigo-600 mb-2">{event.organizer}</p>
         )}
 
-        {/* Date & Time */}
+        {/* Date & Time — clean text, no emojis */}
         <div className="flex items-center gap-3 text-sm text-gray-500 mb-3">
-          <span className="flex items-center gap-1">
-            📅 {formatDate(event.date)}
-          </span>
-          <span className="flex items-center gap-1">
-            🕐 {formatTime(event.date)}
-          </span>
+          <span>{formatDate(event.date)}</span>
+          <span className="text-gray-300">|</span>
+          <span>{formatTime(event.date)}</span>
         </div>
 
-        {/* Description */}
         <p className="text-gray-600 text-sm line-clamp-2 mb-4">
           {event.description || 'Join this amazing online class!'}
         </p>
@@ -522,9 +429,7 @@ function EventCard({ event, formatDate, formatTime, getLowestPrice, isUpcoming }
         <div className="flex items-center justify-between">
           <span
             className={`font-medium ${
-              isUpcoming
-                ? 'text-indigo-600 group-hover:underline'
-                : 'text-gray-400'
+              isUpcoming ? 'text-indigo-600 group-hover:underline' : 'text-gray-400'
             }`}
           >
             {isUpcoming ? 'Register Now →' : 'View Details →'}

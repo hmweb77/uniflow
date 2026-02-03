@@ -19,12 +19,11 @@ export default function PublicEventPage() {
   const [showRegistration, setShowRegistration] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
 
-  // Registration form
   const [formData, setFormData] = useState({
     name: '',
     surname: '',
     email: '',
-    emailPrefix: '', // For domain-restricted emails
+    emailPrefix: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -32,9 +31,7 @@ export default function PublicEventPage() {
   const t = getTranslations(locale);
 
   useEffect(() => {
-    if (slug) {
-      fetchEvent();
-    }
+    if (slug) fetchEvent();
   }, [slug]);
 
   const fetchEvent = async () => {
@@ -49,12 +46,9 @@ export default function PublicEventPage() {
         setEvent(eventData);
         setLocale(eventData.language || 'en');
 
-        // Auto-select first ticket if only one exists
         if (eventData.tickets && eventData.tickets.length === 1) {
           setSelectedTicket(eventData.tickets[0]);
-        }
-        // Legacy: create ticket from price if no tickets array
-        else if (!eventData.tickets && eventData.price) {
+        } else if (!eventData.tickets && eventData.price) {
           const legacyTicket = {
             id: 'default',
             name: 'General Admission',
@@ -84,11 +78,7 @@ export default function PublicEventPage() {
 
   const validateEmail = () => {
     const emailDomain = event?.emailDomain?.trim();
-
-    // If domain restriction exists
     if (emailDomain) {
-      const fullEmail = `${formData.emailPrefix}@${emailDomain}`;
-      // Basic validation
       if (!formData.emailPrefix || formData.emailPrefix.length < 2) {
         setEmailError(
           locale === 'fr'
@@ -97,10 +87,8 @@ export default function PublicEventPage() {
         );
         return null;
       }
-      return fullEmail;
+      return `${formData.emailPrefix}@${emailDomain}`;
     }
-
-    // No domain restriction - validate full email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       setEmailError(
@@ -115,17 +103,16 @@ export default function PublicEventPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!selectedTicket) {
-      setError(locale === 'fr' ? 'Veuillez sélectionner un ticket' : 'Please select a ticket');
+      setError(
+        locale === 'fr' ? 'Veuillez sélectionner un ticket' : 'Please select a ticket'
+      );
       return;
     }
-
     const validatedEmail = validateEmail();
     if (!validatedEmail) return;
 
     setSubmitting(true);
-
     try {
       const response = await fetch('/api/checkout', {
         method: 'POST',
@@ -142,9 +129,7 @@ export default function PublicEventPage() {
           locale,
         }),
       });
-
       const data = await response.json();
-
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -165,13 +150,12 @@ export default function PublicEventPage() {
   const formatDate = (timestamp) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const options = {
+    return date.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-    };
-    return date.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', options);
+    });
   };
 
   const formatTime = (timestamp) => {
@@ -183,32 +167,17 @@ export default function PublicEventPage() {
     });
   };
 
-  const getFormatIcon = (format) => {
-    switch (format) {
-      case 'live':
-        return '🔴';
-      case 'replay':
-        return '📹';
-      case 'materials':
-        return '📚';
-      case 'hybrid':
-        return '🎯';
-      default:
-        return '🎓';
-    }
-  };
-
   const getFormatLabel = (format) => {
     const labels = {
       en: {
         live: 'Live Session',
-        replay: 'Replay / Recording',
+        replay: 'Replay',
         materials: 'Materials Only',
         hybrid: 'Live + Materials',
       },
       fr: {
-        live: 'Session en direct',
-        replay: 'Replay / Enregistrement',
+        live: 'En direct',
+        replay: 'Replay',
         materials: 'Supports uniquement',
         hybrid: 'Live + Supports',
       },
@@ -216,26 +185,34 @@ export default function PublicEventPage() {
     return labels[locale]?.[format] || format;
   };
 
+  // Loading
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-[3px] border-gray-200 border-t-gray-800 rounded-full animate-spin" />
+        </div>
       </div>
     );
   }
 
+  // Error
   if (error || !event) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="text-center">
-          <div className="text-6xl mb-4">🔍</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {locale === 'fr' ? 'Événement non trouvé' : 'Event Not Found'}
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 mx-auto mb-6 bg-gray-100 rounded-2xl flex items-center justify-center">
+            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">
+            {locale === 'fr' ? 'Événement non trouvé' : 'Event not found'}
           </h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 text-sm">
             {locale === 'fr'
-              ? "L'événement que vous cherchez n'existe pas."
-              : "The event you're looking for doesn't exist."}
+              ? "Ce lien ne correspond à aucun événement."
+              : "This link doesn't match any event."}
           </p>
         </div>
       </div>
@@ -246,263 +223,300 @@ export default function PublicEventPage() {
   const hasEmailRestriction = event.emailDomain && event.emailDomain.trim().length > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Language Toggle */}
-      <div className="absolute top-4 right-4 z-10">
-        <button
-          onClick={() => setLocale(locale === 'en' ? 'fr' : 'en')}
-          className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-sm font-medium shadow-sm hover:bg-white transition-colors"
-        >
-          {locale === 'en' ? '🇫🇷 FR' : '🇬🇧 EN'}
-        </button>
+    <div className="min-h-screen bg-gray-50/80">
+      {/* Top bar */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+          <span className="text-[13px] font-medium text-gray-400 tracking-wide uppercase">
+            Uniflow
+          </span>
+          <button
+            onClick={() => setLocale(locale === 'en' ? 'fr' : 'en')}
+            className="text-[13px] font-medium text-gray-500 hover:text-gray-900 transition-colors px-2.5 py-1 rounded-md hover:bg-gray-100"
+          >
+            {locale === 'en' ? 'Français' : 'English'}
+          </button>
+        </div>
       </div>
 
-      {/* Banner */}
-      <div className="h-64 md:h-80 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 relative">
-        {event.bannerUrl && (
-          <img
-            src={event.bannerUrl}
-            alt={event.title}
-            className="w-full h-full object-cover"
-          />
-        )}
-        <div className="absolute inset-0 bg-black/30"></div>
+      <div className="max-w-3xl mx-auto px-4 py-6 md:py-10">
+        {/* Banner — contained, rounded, object-contain so full image shows */}
+        <div className="rounded-2xl overflow-hidden mb-6 bg-gray-900 shadow-sm">
+          {event.bannerUrl ? (
+            <img
+              src={event.bannerUrl}
+              alt={event.title}
+              className="w-full h-auto max-h-[420px] object-contain mx-auto"
+            />
+          ) : (
+            <div className="aspect-[16/7] bg-gradient-to-br from-gray-800 via-gray-900 to-black" />
+          )}
+        </div>
 
-        {/* Logo */}
-        {event.logoUrl && (
-          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2">
-            <div className="w-24 h-24 bg-white rounded-xl shadow-lg p-2">
-              <img
-                src={event.logoUrl}
-                alt="Logo"
-                className="w-full h-full object-contain"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className={`max-w-2xl mx-auto px-4 py-12 ${event.logoUrl ? 'pt-16' : ''}`}>
-        {/* Title & Meta */}
-        <div className="text-center mb-8">
+        {/* Event info — below the banner */}
+        <div className="mb-8 px-1">
           {/* Format badge */}
           {event.format && (
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium mb-4">
-              {getFormatIcon(event.format)} {getFormatLabel(event.format)}
+            <div className="mb-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-md">
+                {event.format === 'live' && (
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                )}
+                {getFormatLabel(event.format)}
+              </span>
             </div>
           )}
 
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight mb-2">
             {event.title}
           </h1>
 
-          {/* Organizer */}
           {event.organizer && (
-            <p className="text-gray-600 mb-4">
-              {locale === 'fr' ? 'Par' : 'By'} <span className="font-medium">{event.organizer}</span>
+            <p className="text-gray-500 text-sm mb-4">
+              {locale === 'fr' ? 'Par' : 'By'}{' '}
+              <span className="text-gray-700 font-medium">{event.organizer}</span>
             </p>
           )}
 
           {/* Date & Time */}
-          <div className="flex items-center justify-center gap-4 text-gray-600">
-            <div className="flex items-center gap-2">
-              <span>📅</span>
+          <div className="flex items-center gap-5 text-gray-600">
+            <div className="flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
               <span>{formatDate(event.date)}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span>🕐</span>
+            <div className="w-px h-4 bg-gray-200" />
+            <div className="flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+              </svg>
               <span>{formatTime(event.date)}</span>
             </div>
           </div>
         </div>
 
-        {/* Description */}
-        {event.description && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-            <h2 className="font-semibold text-gray-900 mb-3">
-              {locale === 'fr' ? 'À propos' : 'About'}
-            </h2>
-            <p className="text-gray-600 whitespace-pre-wrap">{event.description}</p>
-          </div>
-        )}
-
-        {/* Who This Is For */}
-        {event.whoThisIsFor && (
-          <div className="bg-indigo-50 rounded-xl p-6 mb-6">
-            <h2 className="font-semibold text-indigo-900 mb-2">
-              {locale === 'fr' ? '👤 Pour qui ?' : '👤 Who is this for?'}
-            </h2>
-            <p className="text-indigo-700">{event.whoThisIsFor}</p>
-          </div>
-        )}
-
-        {/* Tickets Section */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-          <h2 className="font-semibold text-gray-900 mb-4">
-            {locale === 'fr' ? '🎫 Choisir un ticket' : '🎫 Select a Ticket'}
-          </h2>
-
-          <div className="space-y-4">
-            {tickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                onClick={() => {
-                  setSelectedTicket(ticket);
-                  setShowRegistration(true);
-                }}
-                className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                  selectedTicket?.id === ticket.id
-                    ? 'border-indigo-500 bg-indigo-50'
-                    : 'border-gray-200 hover:border-indigo-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold text-gray-900">{ticket.name}</h3>
-                  <span className="text-xl font-bold text-indigo-600">
-                    {ticket.price} €
-                  </span>
-                </div>
-
-                {ticket.description && (
-                  <p className="text-sm text-gray-500 mb-3">{ticket.description}</p>
-                )}
-
-                {ticket.includes && ticket.includes.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {ticket.includes.map((item, i) => (
-                      <span
-                        key={i}
-                        className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full"
-                      >
-                        ✓ {item}
-                      </span>
-                    ))}
-                  </div>
-                )}
+        {/* Two-column on desktop: content + sticky ticket sidebar */}
+        <div className="md:flex md:gap-8 md:items-start">
+          {/* Left: details */}
+          <div className="md:flex-1 space-y-5 mb-8 md:mb-0">
+            {/* Description */}
+            {event.description && (
+              <div className="bg-white rounded-xl p-5 border border-gray-100">
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                  {locale === 'fr' ? 'À propos' : 'About'}
+                </h2>
+                <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-wrap">
+                  {event.description}
+                </p>
               </div>
-            ))}
+            )}
+
+            {/* Who is this for */}
+            {event.whoThisIsFor && (
+              <div className="bg-blue-50/60 rounded-xl p-5 border border-blue-100/60">
+                <h2 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
+                  {locale === 'fr' ? 'Pour qui ?' : 'Who is this for?'}
+                </h2>
+                <p className="text-blue-800 text-[15px] leading-relaxed">
+                  {event.whoThisIsFor}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Registration Form */}
-          {showRegistration && selectedTicket && (
-            <form onSubmit={handleSubmit} className="mt-6 pt-6 border-t border-gray-200 space-y-4">
-              <h3 className="font-semibold text-gray-900">
-                {locale === 'fr' ? 'Vos informations' : 'Your Information'}
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.registration.name} *
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                    placeholder={t.registration.namePlaceholder}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.registration.surname} *
-                  </label>
-                  <input
-                    type="text"
-                    name="surname"
-                    value={formData.surname}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                    placeholder={t.registration.surnamePlaceholder}
-                  />
-                </div>
+          {/* Right: ticket selection — sticky on desktop */}
+          <div className="md:w-[340px] md:sticky md:top-[72px]">
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="p-5 border-b border-gray-100">
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {locale === 'fr' ? 'Réserver' : 'Book your spot'}
+                </h2>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t.registration.email} *
-                </label>
-
-                {hasEmailRestriction ? (
-                  // Domain-restricted email input
-                  <div className="flex items-center">
-                    <input
-                      type="text"
-                      name="emailPrefix"
-                      value={formData.emailPrefix}
-                      onChange={handleInputChange}
-                      required
-                      className={`flex-1 px-4 py-3 border rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none ${
-                        emailError ? 'border-red-300' : 'border-gray-300'
+              <div className="p-4 space-y-3">
+                {tickets.map((ticket) => {
+                  const isSelected = selectedTicket?.id === ticket.id;
+                  return (
+                    <div
+                      key={ticket.id}
+                      onClick={() => {
+                        setSelectedTicket(ticket);
+                        setShowRegistration(true);
+                      }}
+                      className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all duration-150 ${
+                        isSelected
+                          ? 'border-gray-900 bg-gray-50'
+                          : 'border-gray-150 hover:border-gray-300 bg-white'
                       }`}
-                      placeholder={locale === 'fr' ? 'prenom.nom' : 'firstname.lastname'}
-                    />
-                    <span className="px-4 py-3 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600">
-                      @{event.emailDomain}
-                    </span>
-                  </div>
-                ) : (
-                  // Standard email input
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none ${
-                      emailError ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder={t.registration.emailPlaceholder}
-                  />
-                )}
+                    >
+                      {/* Selection indicator */}
+                      <div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                        isSelected ? 'border-gray-900 bg-gray-900' : 'border-gray-300'
+                      }`}>
+                        {isSelected && (
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </div>
 
-                {emailError && (
-                  <p className="text-red-500 text-sm mt-1">{emailError}</p>
-                )}
+                      <div className="pr-8">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className="text-lg font-bold text-gray-900">
+                            {ticket.price} €
+                          </span>
+                        </div>
+                        <p className="font-medium text-sm text-gray-800">{ticket.name}</p>
 
-                {hasEmailRestriction && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    {locale === 'fr'
-                      ? `Seules les adresses @${event.emailDomain} sont acceptées`
-                      : `Only @${event.emailDomain} addresses are accepted`}
-                  </p>
-                )}
+                        {ticket.description && (
+                          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                            {ticket.description}
+                          </p>
+                        )}
+
+                        {ticket.includes && ticket.includes.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2.5">
+                            {ticket.includes.map((item, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[11px] rounded-md font-medium"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              <p className="text-xs text-gray-500">{t.registration.termsNotice}</p>
+              {/* Registration Form — inside the ticket card */}
+              {showRegistration && selectedTicket && (
+                <form onSubmit={handleSubmit} className="border-t border-gray-100 p-5 space-y-3.5">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                        {t.registration.name}
+                      </label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 outline-none transition-all bg-gray-50/50 placeholder:text-gray-300"
+                        placeholder={t.registration.namePlaceholder}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                        {t.registration.surname}
+                      </label>
+                      <input
+                        type="text"
+                        name="surname"
+                        value={formData.surname}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 outline-none transition-all bg-gray-50/50 placeholder:text-gray-300"
+                        placeholder={t.registration.surnamePlaceholder}
+                      />
+                    </div>
+                  </div>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {submitting
-                  ? t.common.loading
-                  : `${t.registration.proceedToPayment} - ${selectedTicket.price} €`}
-              </button>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                      {t.registration.email}
+                    </label>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRegistration(false);
-                  setSelectedTicket(null);
-                }}
-                className="w-full py-2 text-gray-500 text-sm hover:text-gray-700"
-              >
-                {t.common.cancel}
-              </button>
-            </form>
-          )}
+                    {hasEmailRestriction ? (
+                      <div className="flex">
+                        <input
+                          type="text"
+                          name="emailPrefix"
+                          value={formData.emailPrefix}
+                          onChange={handleInputChange}
+                          required
+                          className={`flex-1 px-3 py-2.5 text-sm border rounded-l-lg focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 outline-none transition-all bg-gray-50/50 placeholder:text-gray-300 ${
+                            emailError ? 'border-red-300' : 'border-gray-200'
+                          }`}
+                          placeholder={locale === 'fr' ? 'prenom.nom' : 'firstname.lastname'}
+                        />
+                        <span className="px-3 py-2.5 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-xs text-gray-500 flex items-center whitespace-nowrap">
+                          @{event.emailDomain}
+                        </span>
+                      </div>
+                    ) : (
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        required
+                        className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400 outline-none transition-all bg-gray-50/50 placeholder:text-gray-300 ${
+                          emailError ? 'border-red-300' : 'border-gray-200'
+                        }`}
+                        placeholder={t.registration.emailPlaceholder}
+                      />
+                    )}
+
+                    {emailError && (
+                      <p className="text-red-500 text-xs mt-1">{emailError}</p>
+                    )}
+
+                    {hasEmailRestriction && (
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        {locale === 'fr'
+                          ? `Seules les adresses @${event.emailDomain} sont acceptées`
+                          : `Only @${event.emailDomain} addresses accepted`}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-3 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-gray-800 active:bg-black disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {submitting
+                      ? (locale === 'fr' ? 'Chargement...' : 'Loading...')
+                      : `${locale === 'fr' ? 'Payer' : 'Pay'} ${selectedTicket.price} €`}
+                  </button>
+
+                  <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+                    {t.registration.termsNotice}
+                  </p>
+                </form>
+              )}
+
+              {/* Not yet selected — prompt */}
+              {!showRegistration && tickets.length > 0 && (
+                <div className="p-4 pt-0">
+                  <button
+                    onClick={() => {
+                      if (selectedTicket) setShowRegistration(true);
+                    }}
+                    disabled={!selectedTicket}
+                    className="w-full py-3 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
+                  >
+                    {selectedTicket
+                      ? `${locale === 'fr' ? 'Continuer' : 'Continue'} — ${selectedTicket.price} €`
+                      : locale === 'fr'
+                      ? 'Choisissez un ticket'
+                      : 'Select a ticket'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center text-sm text-gray-400">
-          <p>Powered by Uniflow</p>
+        <div className="mt-16 pb-8 text-center">
+          <p className="text-xs text-gray-300">Powered by Uniflow</p>
         </div>
       </div>
     </div>
