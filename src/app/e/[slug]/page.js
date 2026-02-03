@@ -7,7 +7,6 @@ import { useParams } from 'next/navigation';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useLocale } from '@/contexts/LocaleContext';
-import Logo from '@/components/ui/Logo';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import LocaleToggle from '@/components/ui/LocaleToggle';
 
@@ -236,7 +235,7 @@ export default function PublicEventPage() {
         style={{ borderColor: 'var(--border-light)' }}
       >
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Logo size="sm" />
+
           <div className="flex items-center gap-1">
             <LocaleToggle />
             <ThemeToggle />

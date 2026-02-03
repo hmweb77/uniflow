@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import Link from 'next/link';
-import Logo from '@/components/ui/Logo';
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,9 +36,7 @@ export default function LoginPage() {
     >
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <Logo size="lg" />
-          </div>
+         
           <p style={{ color: 'var(--text-secondary)' }}>Admin Login</p>
         </div>
 
