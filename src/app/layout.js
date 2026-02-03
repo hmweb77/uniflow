@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: 'Uniflow — Event & Payment Platform',
-  description: 'Create and manage paid online events for university students',
+  title: 'Uniflow — Courses Platform',
+  description: 'Online Courses for university students',
 };
 
 export default function RootLayout({ children }) {
