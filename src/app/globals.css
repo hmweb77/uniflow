@@ -237,23 +237,44 @@ body {
   color: var(--text-primary);
 }
 
-/* Inputs */
+/* Inputs — always dark text on light background for readability */
 .input {
   width: 100%;
   padding: 0.625rem 0.875rem;
   font-size: 0.875rem;
-  background-color: var(--bg-primary);
+  background-color: #ffffff;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  color: var(--text-primary);
+  color: #111827;
   outline: none;
 }
 .input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--color-gray-500);
 }
 .input:focus {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px rgba(51,115,245,0.12);
+}
+/* Dark theme: light text on dark input background */
+.dark .input {
+  background-color: var(--color-gray-900);
+  border-color: var(--color-gray-700);
+  color: #f9fafb;
+}
+.dark .input::placeholder {
+  color: var(--color-gray-500);
+}
+
+/* Admin dashboard: force readable contrast on all form inputs (dark text on white) */
+.admin-dashboard input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+.admin-dashboard textarea,
+.admin-dashboard select {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+.admin-dashboard input::placeholder,
+.admin-dashboard textarea::placeholder {
+  color: #6b7280 !important;
 }
 
 .select {
