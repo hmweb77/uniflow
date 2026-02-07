@@ -1,8 +1,10 @@
 // src/app/api/checkout/route.js
 // SECURITY: Price is verified from database, NOT from client request
+// SUPPORTS: Paid events (Stripe) + Free events (direct registration)
 
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(request) {
   try {
@@ -19,7 +21,7 @@ export async function POST(request) {
     // ============================================
     // VALIDATION
     // ============================================
-    
+
     if (!eventId || !customerEmail) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -40,18 +42,18 @@ export async function POST(request) {
     // GET EVENT & PRICE FROM DATABASE (CRITICAL!)
     // Never trust client-provided price
     // ============================================
-    
+
     const eventDoc = await adminDb.collection('events').doc(eventId).get();
-    
+
     if (!eventDoc.exists) {
       return NextResponse.json(
         { error: 'Event not found' },
         { status: 404 }
       );
     }
-    
+
     const eventData = eventDoc.data();
-    
+
     // Check if event is still active
     if (eventData.status === 'cancelled') {
       return NextResponse.json(
@@ -64,6 +66,13 @@ export async function POST(request) {
     // CHECK IF EVENT DATE HAS PASSED (CRITICAL!)
     // ============================================
 
+    if (!eventData.date) {
+      return NextResponse.json(
+        { error: 'Event date is not configured' },
+        { status: 500 }
+      );
+    }
+
     let eventDate;
     if (eventData.date?.toDate) {
       eventDate = eventData.date.toDate();
@@ -71,6 +80,13 @@ export async function POST(request) {
       eventDate = new Date(eventData.date._seconds * 1000);
     } else {
       eventDate = new Date(eventData.date);
+    }
+
+    if (isNaN(eventDate.getTime())) {
+      return NextResponse.json(
+        { error: 'Event has an invalid date configuration' },
+        { status: 500 }
+      );
     }
 
     if (eventDate < new Date()) {
@@ -83,24 +99,23 @@ export async function POST(request) {
     // ============================================
     // GET SERVER-SIDE PRICE FROM TICKET
     // ============================================
-    
+
     let price;
     let resolvedTicketId = ticketId || 'default';
     let resolvedTicketName = 'General Admission';
-    
+
     if (eventData.tickets && eventData.tickets.length > 0) {
-      // Find the specific ticket
-      const ticket = ticketId 
+      const ticket = ticketId
         ? eventData.tickets.find(t => t.id === ticketId)
-        : eventData.tickets[0]; // Default to first ticket
-      
+        : eventData.tickets[0];
+
       if (!ticket) {
         return NextResponse.json(
           { error: 'Ticket type not found' },
           { status: 404 }
         );
       }
-      
+
       price = ticket.price;
       resolvedTicketId = ticket.id;
       resolvedTicketName = ticket.name;
@@ -109,8 +124,8 @@ export async function POST(request) {
       price = eventData.price;
     }
 
-    // Validate price
-    if (typeof price !== 'number' || price <= 0 || !isFinite(price)) {
+    // Validate price — allows 0 for free events
+    if (typeof price !== 'number' || !isFinite(price) || price < 0) {
       return NextResponse.json(
         { error: 'Invalid ticket price configuration' },
         { status: 500 }
@@ -120,11 +135,11 @@ export async function POST(request) {
     // ============================================
     // CHECK EMAIL DOMAIN RESTRICTION
     // ============================================
-    
+
     if (eventData.emailDomain && eventData.emailDomain.trim()) {
       const requiredDomain = eventData.emailDomain.trim().toLowerCase();
       const emailDomain = customerEmail.split('@')[1]?.toLowerCase();
-      
+
       if (emailDomain !== requiredDomain) {
         return NextResponse.json(
           { error: `Only @${requiredDomain} emails are allowed for this event` },
@@ -154,17 +169,11 @@ export async function POST(request) {
       );
     }
 
-    // ============================================
-    // CREATE STRIPE CHECKOUT SESSION
-    // ============================================
-    
-    const Stripe = (await import('stripe')).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2023-10-16',
-    });
+    // Sanitize inputs
+    const sanitize = (str) => str ? String(str).slice(0, 200).replace(/[<>]/g, '') : '';
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    
+
     if (!appUrl) {
       console.error('NEXT_PUBLIC_APP_URL is not configured');
       return NextResponse.json(
@@ -173,10 +182,143 @@ export async function POST(request) {
       );
     }
 
-    // Sanitize inputs for metadata
-    const sanitize = (str) => str ? String(str).slice(0, 200).replace(/[<>]/g, '') : '';
+    // ============================================
+    // FREE EVENT → Register directly (skip Stripe)
+    // ============================================
 
-    // Build product name
+    if (price === 0) {
+      const now = new Date();
+
+      // Save attendee
+      const attendeeData = {
+        eventId,
+        eventTitle: eventData.title,
+        name: sanitize(customerName) || '',
+        surname: sanitize(customerSurname) || '',
+        email: normalizedEmail,
+        paymentStatus: 'completed',
+        stripeSessionId: `free_${eventId}_${Date.now()}`,
+        stripePaymentIntent: null,
+        amountPaid: 0,
+        currency: 'eur',
+        ticketId: resolvedTicketId,
+        ticketName: resolvedTicketName,
+        ticketIncludes: eventData.tickets?.find(t => t.id === resolvedTicketId)?.includes || [],
+        createdAt: now,
+        processedAt: now,
+        isFreeRegistration: true,
+      };
+
+      const attendeeRef = await adminDb.collection('attendees').add(attendeeData);
+      console.log('✅ Free attendee registered:', attendeeRef.id);
+
+      // Update/create user record
+      try {
+        const existingUserQuery = await adminDb
+          .collection('users')
+          .where('email', '==', normalizedEmail)
+          .limit(1)
+          .get();
+
+        if (existingUserQuery.empty) {
+          await adminDb.collection('users').add({
+            email: normalizedEmail,
+            name: sanitize(customerName) || '',
+            surname: sanitize(customerSurname) || '',
+            createdAt: now,
+            updatedAt: now,
+            totalSpent: 0,
+            purchaseCount: 1,
+            events: [eventId],
+            lastPurchase: now,
+          });
+        } else {
+          const userDoc = existingUserQuery.docs[0];
+          const userData = userDoc.data();
+          const updatedEvents = userData.events || [];
+          if (!updatedEvents.includes(eventId)) updatedEvents.push(eventId);
+
+          await userDoc.ref.update({
+            updatedAt: now,
+            purchaseCount: (userData.purchaseCount || 0) + 1,
+            events: updatedEvents,
+            lastPurchase: now,
+          });
+        }
+      } catch (userErr) {
+        console.error('⚠️ Free reg user update failed:', userErr.message);
+      }
+
+      // Update event stats (atomic)
+      try {
+        await adminDb.collection('events').doc(eventId).update({
+          attendeeCount: FieldValue.increment(1),
+        });
+      } catch (statsErr) {
+        console.error('⚠️ Free reg stats update failed:', statsErr.message);
+      }
+
+      // Send confirmation email
+      try {
+        const { sendEmail, getConfirmationEmailTemplate, addContactToBrevo } = await import('../../lib/brevo');
+
+        const formattedDate = eventDate.toLocaleDateString(
+          eventData.language === 'fr' ? 'fr-FR' : 'en-GB',
+          { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+        );
+        const formattedTime = eventDate.toLocaleTimeString(
+          eventData.language === 'fr' ? 'fr-FR' : 'en-GB',
+          { hour: '2-digit', minute: '2-digit' }
+        );
+
+        await addContactToBrevo({
+          email: normalizedEmail,
+          firstName: sanitize(customerName) || '',
+          lastName: sanitize(customerSurname) || '',
+          eventDate,
+          eventTitle: eventData.title,
+          meetingLink: eventData.meetingLink || '',
+          eventId,
+          ticketType: resolvedTicketName,
+          listId: parseInt(process.env.BREVO_LIST_ID || '10'),
+        }).catch(err => console.error('⚠️ Brevo contact error:', err.message));
+
+        const emailTemplate = getConfirmationEmailTemplate({
+          customerName: sanitize(customerName) || 'Student',
+          eventId,
+          eventTitle: eventData.title,
+          eventDate: formattedDate,
+          eventTime: formattedTime,
+          meetingLink: eventData.meetingLink || '',
+          ticketName: resolvedTicketName,
+          locale: eventData.language || locale,
+        });
+
+        await sendEmail({
+          to: normalizedEmail,
+          subject: emailTemplate.subject,
+          htmlContent: emailTemplate.htmlContent,
+          textContent: emailTemplate.textContent,
+        });
+
+        console.log('✅ Free reg email sent to:', normalizedEmail);
+      } catch (emailErr) {
+        console.error('⚠️ Free reg email failed:', emailErr.message);
+      }
+
+      const successUrl = `${appUrl}/success?lang=${locale}&event=${eventId}`;
+      return NextResponse.json({ url: successUrl, free: true });
+    }
+
+    // ============================================
+    // PAID EVENT → Create Stripe checkout session
+    // ============================================
+
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2023-10-16',
+    });
+
     const productName = resolvedTicketName !== 'General Admission'
       ? `${eventData.title} - ${resolvedTicketName}`
       : eventData.title;
@@ -184,7 +326,7 @@ export async function POST(request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer_email: normalizedEmail,
-      
+
       line_items: [
         {
           price_data: {
@@ -193,13 +335,12 @@ export async function POST(request) {
               name: productName,
               description: `Registration for ${eventData.title}`,
             },
-            unit_amount: Math.round(price * 100), // Convert to cents
+            unit_amount: Math.round(price * 100),
           },
           quantity: 1,
         },
       ],
-      
-      // Metadata for webhook processing
+
       metadata: {
         eventId,
         ticketId: resolvedTicketId,
@@ -208,13 +349,12 @@ export async function POST(request) {
         customerSurname: sanitize(customerSurname) || '',
         customerEmail: normalizedEmail,
       },
-      
+
       success_url: `${appUrl}/success?lang=${locale}&event=${eventId}`,
       cancel_url: `${appUrl}/e/${eventData.slug || eventId}`,
-      
+
       locale: locale === 'fr' ? 'fr' : 'auto',
-      
-      // Payment intent metadata for reconciliation
+
       payment_intent_data: {
         metadata: {
           eventId,
@@ -223,17 +363,15 @@ export async function POST(request) {
           customerEmail: normalizedEmail,
         },
       },
-      
-      // Session expires in 30 minutes
+
       expires_at: Math.floor(Date.now() / 1000) + 1800,
     });
 
     return NextResponse.json({ url: session.url });
-    
+
   } catch (error) {
     console.error('Checkout error:', error);
-    
-    // Don't expose internal errors
+
     return NextResponse.json(
       { error: 'Failed to create checkout session. Please try again.' },
       { status: 500 }

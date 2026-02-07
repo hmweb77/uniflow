@@ -1,9 +1,11 @@
 // src/app/api/webhook/route.js
-// IMPROVED: Handles Stripe webhooks, saves to attendees + users collections, sends email
+// Handles Stripe payment confirmations
+// FIXED: Uses FieldValue.increment() for atomic counter updates
 
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { adminDb } from '../../lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { sendEmail, getConfirmationEmailTemplate, addContactToBrevo } from '../../lib/brevo';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +13,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request) {
   console.log('🔔 [WEBHOOK] Received request');
-  
+
   const body = await request.text();
   const headersList = await headers();
   const signature = headersList.get('stripe-signature');
@@ -19,7 +21,7 @@ export async function POST(request) {
   // ============================================
   // VALIDATE CONFIGURATION
   // ============================================
-  
+
   if (!process.env.STRIPE_WEBHOOK_SECRET) {
     console.error('❌ [WEBHOOK] STRIPE_WEBHOOK_SECRET not configured');
     return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
@@ -33,13 +35,13 @@ export async function POST(request) {
   // ============================================
   // VERIFY WEBHOOK SIGNATURE
   // ============================================
-  
+
   let event;
 
   try {
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
-    
+
     event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET);
     console.log('✅ [WEBHOOK] Signature verified, event:', event.type);
   } catch (err) {
@@ -50,7 +52,7 @@ export async function POST(request) {
   // ============================================
   // HANDLE CHECKOUT COMPLETED
   // ============================================
-  
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     console.log('💳 [WEBHOOK] Processing checkout:', session.id);
@@ -75,7 +77,7 @@ export async function POST(request) {
       // ============================================
       // IDEMPOTENCY CHECK
       // ============================================
-      
+
       const existingAttendee = await adminDb
         .collection('attendees')
         .where('stripeSessionId', '==', session.id)
@@ -90,7 +92,7 @@ export async function POST(request) {
       // ============================================
       // GET EVENT DATA
       // ============================================
-      
+
       const eventDoc = await adminDb.collection('events').doc(eventId).get();
 
       if (!eventDoc.exists) {
@@ -110,10 +112,10 @@ export async function POST(request) {
       // ============================================
       // SAVE ATTENDEE TO DATABASE
       // ============================================
-      
+
       const normalizedEmail = customerEmail.toLowerCase().trim();
       const now = new Date();
-      
+
       const attendeeData = {
         eventId,
         eventTitle: eventData.title,
@@ -139,9 +141,8 @@ export async function POST(request) {
       // ============================================
       // CREATE/UPDATE USER IN USERS COLLECTION
       // ============================================
-      
+
       try {
-        // Check if user already exists by email
         const existingUserQuery = await adminDb
           .collection('users')
           .where('email', '==', normalizedEmail)
@@ -161,19 +162,19 @@ export async function POST(request) {
             events: [eventId],
             lastPurchase: now,
           };
-          
+
           const userRef = await adminDb.collection('users').add(userData);
           console.log('✅ [WEBHOOK] New user created:', userRef.id);
         } else {
           // Update existing user
           const userDoc = existingUserQuery.docs[0];
           const existingData = userDoc.data();
-          
+
           const updatedEvents = existingData.events || [];
           if (!updatedEvents.includes(eventId)) {
             updatedEvents.push(eventId);
           }
-          
+
           await userDoc.ref.update({
             name: customerName || existingData.name || '',
             surname: customerSurname || existingData.surname || '',
@@ -187,20 +188,20 @@ export async function POST(request) {
         }
       } catch (userErr) {
         console.error('⚠️ [WEBHOOK] Failed to update users collection:', userErr.message);
-        // Don't fail the webhook - attendee was already saved
+        // Don't fail the webhook — attendee was already saved
       }
 
       // ============================================
-      // UPDATE EVENT ATTENDEE COUNT (OPTIONAL)
+      // UPDATE EVENT STATS (ATOMIC INCREMENTS)
       // ============================================
-      
+
       try {
         const eventRef = adminDb.collection('events').doc(eventId);
         await eventRef.update({
-          attendeeCount: (eventData.attendeeCount || 0) + 1,
-          totalRevenue: (eventData.totalRevenue || 0) + (session.amount_total / 100),
+          attendeeCount: FieldValue.increment(1),
+          totalRevenue: FieldValue.increment(session.amount_total / 100),
         });
-        console.log('✅ [WEBHOOK] Event stats updated');
+        console.log('✅ [WEBHOOK] Event stats updated (atomic)');
       } catch (eventUpdateErr) {
         console.error('⚠️ [WEBHOOK] Failed to update event stats:', eventUpdateErr.message);
       }
@@ -208,7 +209,7 @@ export async function POST(request) {
       // ============================================
       // SEND CONFIRMATION EMAIL
       // ============================================
-      
+
       // Parse event date
       let eventDate;
       if (eventData.date?.toDate) {
@@ -281,7 +282,7 @@ export async function POST(request) {
 
       console.log('🎉 [WEBHOOK] Success for:', normalizedEmail);
       return NextResponse.json({ received: true, status: 'success', attendeeId: attendeeRef.id });
-      
+
     } catch (err) {
       console.error('❌ [WEBHOOK] Processing error:', err);
       return NextResponse.json({ error: 'Processing error' }, { status: 500 });
@@ -301,12 +302,12 @@ export async function POST(request) {
 }
 
 export async function GET() {
-  return NextResponse.json({ 
+  return NextResponse.json({
     status: 'Webhook endpoint active',
     configured: {
       stripeSecret: !!process.env.STRIPE_SECRET_KEY,
       webhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
       brevoKey: !!process.env.BREVO_API_KEY,
-    }
+    },
   });
 }
