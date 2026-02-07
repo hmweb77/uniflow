@@ -61,6 +61,26 @@ export async function POST(request) {
     }
 
     // ============================================
+    // CHECK IF EVENT DATE HAS PASSED (CRITICAL!)
+    // ============================================
+
+    let eventDate;
+    if (eventData.date?.toDate) {
+      eventDate = eventData.date.toDate();
+    } else if (eventData.date?._seconds) {
+      eventDate = new Date(eventData.date._seconds * 1000);
+    } else {
+      eventDate = new Date(eventData.date);
+    }
+
+    if (eventDate < new Date()) {
+      return NextResponse.json(
+        { error: 'This event has already ended. Registration is closed.' },
+        { status: 400 }
+      );
+    }
+
+    // ============================================
     // GET SERVER-SIDE PRICE FROM TICKET
     // ============================================
     
@@ -114,6 +134,27 @@ export async function POST(request) {
     }
 
     // ============================================
+    // PREVENT DUPLICATE REGISTRATIONS
+    // ============================================
+
+    const normalizedEmail = customerEmail.toLowerCase().trim();
+
+    const existingAttendee = await adminDb
+      .collection('attendees')
+      .where('eventId', '==', eventId)
+      .where('email', '==', normalizedEmail)
+      .where('paymentStatus', '==', 'completed')
+      .limit(1)
+      .get();
+
+    if (!existingAttendee.empty) {
+      return NextResponse.json(
+        { error: 'You are already registered for this event' },
+        { status: 400 }
+      );
+    }
+
+    // ============================================
     // CREATE STRIPE CHECKOUT SESSION
     // ============================================
     
@@ -142,7 +183,7 @@ export async function POST(request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      customer_email: customerEmail.toLowerCase().trim(),
+      customer_email: normalizedEmail,
       
       line_items: [
         {
@@ -165,7 +206,7 @@ export async function POST(request) {
         ticketName: resolvedTicketName,
         customerName: sanitize(customerName) || '',
         customerSurname: sanitize(customerSurname) || '',
-        customerEmail: customerEmail.toLowerCase().trim(),
+        customerEmail: normalizedEmail,
       },
       
       success_url: `${appUrl}/success?lang=${locale}&event=${eventId}`,
@@ -179,7 +220,7 @@ export async function POST(request) {
           eventId,
           ticketId: resolvedTicketId,
           ticketName: resolvedTicketName,
-          customerEmail: customerEmail.toLowerCase().trim(),
+          customerEmail: normalizedEmail,
         },
       },
       

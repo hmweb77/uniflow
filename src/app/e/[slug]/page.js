@@ -99,6 +99,13 @@ export default function PublicEventPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Double-check: block submission for past events
+    if (isPastEvent) {
+      setError(locale === 'fr' ? 'Cet événement est terminé.' : 'This event has ended.');
+      return;
+    }
+
     if (!selectedTicket) {
       setError(t.eventDetail?.selectTicketError || 'Please select a ticket');
       return;
@@ -107,6 +114,7 @@ export default function PublicEventPage() {
     if (!validatedEmail) return;
 
     setSubmitting(true);
+    setError('');
     try {
       const response = await fetch('/api/checkout', {
         method: 'POST',
@@ -131,7 +139,12 @@ export default function PublicEventPage() {
       }
     } catch (err) {
       console.error('Checkout error:', err);
-      alert(t.eventDetail?.paymentFailed || 'Failed to proceed to payment. Please try again.');
+      // Show the specific server error if available (e.g. "already registered", "event ended")
+      const msg =
+        err.message && err.message !== 'Failed to create checkout session'
+          ? err.message
+          : t.eventDetail?.paymentFailed || 'Failed to proceed to payment. Please try again.';
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -165,6 +178,13 @@ export default function PublicEventPage() {
     return labels[locale]?.[format] || format;
   };
 
+  // ─── Determine if event is in the past ─────────────────────
+  const isPastEvent = (() => {
+    if (!event?.date) return false;
+    const date = event.date.toDate ? event.date.toDate() : new Date(event.date);
+    return date < new Date();
+  })();
+
   // ─── Loading ───────────────────────────────────────────────
   if (loading) {
     return (
@@ -184,7 +204,7 @@ export default function PublicEventPage() {
   }
 
   // ─── Error / Not found ─────────────────────────────────────
-  if (error || !event) {
+  if (error && !event) {
     return (
       <div
         className="min-h-screen flex items-center justify-center px-4"
@@ -224,6 +244,8 @@ export default function PublicEventPage() {
     );
   }
 
+  if (!event) return null;
+
   const tickets = event.tickets || [];
   const hasEmailRestriction = event.emailDomain && event.emailDomain.trim().length > 0;
 
@@ -244,16 +266,42 @@ export default function PublicEventPage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 md:py-10">
+        {/* ─── Past event banner ─────────────────────────── */}
+        {isPastEvent && (
+          <div
+            className="rounded-xl p-4 mb-6 flex items-center gap-3"
+            style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-default)',
+            }}
+          >
+            <span className="text-2xl flex-shrink-0">⏰</span>
+            <div>
+              <p
+                className="font-semibold text-sm"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {locale === 'fr' ? 'Événement terminé' : 'Event Ended'}
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {locale === 'fr'
+                  ? 'Cet événement a déjà eu lieu. Les inscriptions sont fermées.'
+                  : 'This event has already taken place. Registration is closed.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ─── Banner ────────────────────────────────────── */}
         <div
-          className="rounded-2xl overflow-hidden mb-6 shadow-sm"
+          className="rounded-2xl overflow-hidden mb-6 shadow-sm relative"
           style={{ backgroundColor: 'var(--bg-inverse)' }}
         >
           {event.bannerUrl ? (
             <img
               src={event.bannerUrl}
               alt={event.title}
-              className="w-full h-auto max-h-[420px] object-contain mx-auto"
+              className={`w-full h-auto max-h-[420px] object-contain mx-auto ${isPastEvent ? 'opacity-60' : ''}`}
             />
           ) : (
             <div
@@ -263,6 +311,15 @@ export default function PublicEventPage() {
                   'linear-gradient(135deg, var(--color-gray-800), var(--color-gray-900))',
               }}
             />
+          )}
+
+          {/* Past overlay on banner */}
+          {isPastEvent && (
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+              <span className="px-5 py-2.5 bg-black/60 text-white text-sm font-semibold rounded-full">
+                {locale === 'fr' ? 'Événement terminé' : 'Event Ended'}
+              </span>
+            </div>
           )}
         </div>
 
@@ -278,7 +335,7 @@ export default function PublicEventPage() {
                   color: 'var(--text-secondary)',
                 }}
               >
-                {event.format === 'live' && (
+                {event.format === 'live' && !isPastEvent && (
                   <span
                     className="w-1.5 h-1.5 rounded-full animate-pulse"
                     style={{ backgroundColor: 'var(--color-error)' }}
@@ -414,9 +471,11 @@ export default function PublicEventPage() {
               >
                 <h2
                   className="text-sm font-semibold"
-                  style={{ color: 'var(--text-primary)' }}
+                  style={{ color: isPastEvent ? 'var(--text-tertiary)' : 'var(--text-primary)' }}
                 >
-                  {t.eventDetail?.bookYourSpot || 'Book your spot'}
+                  {isPastEvent
+                    ? (locale === 'fr' ? 'Inscriptions fermées' : 'Registration Closed')
+                    : (t.eventDetail?.bookYourSpot || 'Book your spot')}
                 </h2>
               </div>
 
@@ -428,49 +487,60 @@ export default function PublicEventPage() {
                     <div
                       key={ticket.id}
                       onClick={() => {
+                        if (isPastEvent) return;
                         setSelectedTicket(ticket);
                         setShowRegistration(true);
                       }}
-                      className="relative p-4 rounded-lg border-2 cursor-pointer transition-all duration-150"
+                      className={`relative p-4 rounded-lg border-2 transition-all duration-150 ${
+                        isPastEvent
+                          ? 'opacity-50 cursor-default'
+                          : 'cursor-pointer'
+                      }`}
                       style={{
-                        borderColor: isSelected
-                          ? 'var(--text-primary)'
-                          : 'var(--border-default)',
-                        backgroundColor: isSelected
-                          ? 'var(--bg-secondary)'
-                          : 'var(--bg-primary)',
-                      }}
-                    >
-                      {/* Selection indicator */}
-                      <div
-                        className="absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all"
-                        style={{
-                          borderColor: isSelected
+                        borderColor: isPastEvent
+                          ? 'var(--border-default)'
+                          : isSelected
                             ? 'var(--text-primary)'
                             : 'var(--border-default)',
-                          backgroundColor: isSelected
-                            ? 'var(--text-primary)'
-                            : 'transparent',
-                        }}
-                      >
-                        {isSelected && (
-                          <svg
-                            className="w-3 h-3"
-                            style={{ color: 'var(--bg-primary)' }}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </div>
+                        backgroundColor: isPastEvent
+                          ? 'var(--bg-secondary)'
+                          : isSelected
+                            ? 'var(--bg-secondary)'
+                            : 'var(--bg-primary)',
+                      }}
+                    >
+                      {/* Selection indicator — hidden for past events */}
+                      {!isPastEvent && (
+                        <div
+                          className="absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all"
+                          style={{
+                            borderColor: isSelected
+                              ? 'var(--text-primary)'
+                              : 'var(--border-default)',
+                            backgroundColor: isSelected
+                              ? 'var(--text-primary)'
+                              : 'transparent',
+                          }}
+                        >
+                          {isSelected && (
+                            <svg
+                              className="w-3 h-3"
+                              style={{ color: 'var(--bg-primary)' }}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </div>
+                      )}
 
-                      <div className="pr-8">
+                      <div className={isPastEvent ? '' : 'pr-8'}>
                         <div className="flex items-baseline gap-2 mb-1">
                           <span
-                            className="text-lg font-bold"
+                            className={`text-lg font-bold ${isPastEvent ? 'line-through' : ''}`}
                             style={{ color: 'var(--text-primary)' }}
                           >
                             {ticket.price} €
@@ -514,8 +584,47 @@ export default function PublicEventPage() {
                 })}
               </div>
 
-              {/* ─── Registration Form ─────────────────────── */}
-              {showRegistration && selectedTicket && (
+              {/* ─── Error message (inline) ─────────────────── */}
+              {error && event && (
+                <div className="px-4 pb-2">
+                  <div
+                    className="rounded-lg px-4 py-3 text-sm"
+                    style={{
+                      backgroundColor: 'rgba(239,68,68,0.08)',
+                      color: 'var(--color-error)',
+                    }}
+                  >
+                    {error}
+                  </div>
+                </div>
+              )}
+
+              {/* ─── Past event notice ─────────────────────── */}
+              {isPastEvent && (
+                <div
+                  className="p-5 text-center border-t"
+                  style={{ borderColor: 'var(--border-light)' }}
+                >
+                  <div className="text-3xl mb-2">🔒</div>
+                  <p
+                    className="text-sm font-medium mb-1"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {locale === 'fr' ? 'Événement terminé' : 'Event has ended'}
+                  </p>
+                  <p
+                    className="text-xs"
+                    style={{ color: 'var(--text-tertiary)' }}
+                  >
+                    {locale === 'fr'
+                      ? 'Les inscriptions sont fermées pour cet événement.'
+                      : 'Registration is no longer available for this event.'}
+                  </p>
+                </div>
+              )}
+
+              {/* ─── Registration Form (only for upcoming events) ── */}
+              {!isPastEvent && showRegistration && selectedTicket && (
                 <form
                   onSubmit={handleSubmit}
                   className="border-t p-5 space-y-3.5"
@@ -651,8 +760,8 @@ export default function PublicEventPage() {
                 </form>
               )}
 
-              {/* Not yet selected — prompt */}
-              {!showRegistration && tickets.length > 0 && (
+              {/* Not yet selected — prompt (only for upcoming events) */}
+              {!isPastEvent && !showRegistration && tickets.length > 0 && (
                 <div className="p-4 pt-0">
                   <button
                     onClick={() => {
