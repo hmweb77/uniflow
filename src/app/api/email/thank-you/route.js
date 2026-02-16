@@ -35,7 +35,7 @@ export async function POST(request) {
     for (const attendeeDoc of attendeesSnap.docs) {
       const attendee = attendeeDoc.data();
       const email = attendee.email;
-      const name = `${attendee.firstName || ''} ${attendee.lastName || ''}`.trim() || 'Student';
+      const name = `${attendee.firstName || attendee.name || ''} ${attendee.lastName || attendee.surname || ''}`.trim() || 'Student';
 
       try {
         const { subject, htmlContent } = getThankYouEmailTemplate({

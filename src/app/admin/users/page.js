@@ -49,8 +49,8 @@ export default function UsersPage() {
             return {
               id: doc.id,
               email: data.email,
-              name: data.name,
-              surname: data.surname,
+              name: data.firstName || data.name,
+              surname: data.lastName || data.surname,
               totalSpent: data.totalSpent || 0,
               purchaseCount: data.purchaseCount || 0,
               events: data.events || [],
@@ -88,8 +88,8 @@ export default function UsersPage() {
           if (!usersMap[email]) {
             usersMap[email] = {
               email: attendee.email,
-              name: attendee.name,
-              surname: attendee.surname,
+              name: attendee.firstName || attendee.name,
+              surname: attendee.lastName || attendee.surname,
               purchases: [],
               totalSpent: 0,
               firstPurchase: attendee.createdAt,
@@ -115,8 +115,8 @@ export default function UsersPage() {
           const lastDate = usersMap[email].lastPurchase?.toDate?.() || new Date(usersMap[email].lastPurchase);
           
           if (attendeeDate > lastDate) {
-            usersMap[email].name = attendee.name || usersMap[email].name;
-            usersMap[email].surname = attendee.surname || usersMap[email].surname;
+            usersMap[email].name = attendee.firstName || attendee.name || usersMap[email].name;
+            usersMap[email].surname = attendee.lastName || attendee.surname || usersMap[email].surname;
             usersMap[email].lastPurchase = attendee.createdAt;
           }
 

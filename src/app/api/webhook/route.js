@@ -58,13 +58,33 @@ export async function POST(request) {
     console.log('💳 [WEBHOOK] Processing checkout:', session.id);
 
     try {
+      // const {
+      //   eventId,
+      //   ticketId,
+      //   ticketName,
+      //   customerName,
+      //   customerSurname,
+      //   customerEmail,
+      //   promoCode,
+      //   promoId,
+      //   campus,
+      //   customFields: customFieldsStr,
+      // } = session.metadata || {};
+
+      // let customFieldsObj = {};
+      // if (customFieldsStr && typeof customFieldsStr === 'string') {
+      //   try {
+      //     customFieldsObj = JSON.parse(customFieldsStr);
+      //   } catch (_) {}
+      // }
+
       const {
         eventId,
         ticketId,
         ticketName,
-        customerName,
-        customerSurname,
-        customerEmail,
+        firstName: customerName,
+        lastName: customerSurname,
+        email: customerEmail,
         promoCode,
         promoId,
         campus,
@@ -130,6 +150,8 @@ export async function POST(request) {
       const attendeeData = {
         eventId,
         eventTitle: eventData.title,
+        firstName: customerName || '',
+        lastName: customerSurname || '',
         name: customerName || '',
         surname: customerSurname || '',
         email: normalizedEmail,
@@ -174,9 +196,11 @@ export async function POST(request) {
           .get();
 
         if (existingUserQuery.empty) {
-          // Create new user
+          // Create new user (firstName/lastName match free-path and consumers)
           const userData = {
             email: normalizedEmail,
+            firstName: customerName || '',
+            lastName: customerSurname || '',
             name: customerName || '',
             surname: customerSurname || '',
             createdAt: now,
@@ -200,6 +224,8 @@ export async function POST(request) {
           }
 
           await userDoc.ref.update({
+            firstName: customerName || existingData.firstName || existingData.name || '',
+            lastName: customerSurname || existingData.lastName || existingData.surname || '',
             name: customerName || existingData.name || '',
             surname: customerSurname || existingData.surname || '',
             updatedAt: now,
@@ -270,6 +296,7 @@ export async function POST(request) {
             meetingLink: eventData.meetingLink || '',
             eventId: eventId,
             ticketType: ticketName || 'General Admission',
+            campus: campus || '',
             listId: parseInt(process.env.BREVO_LIST_ID || '10'),
           });
           console.log('✅ [WEBHOOK] Contact added to Brevo');

@@ -91,7 +91,7 @@ export default function OrdersPage() {
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
       result = result.filter((order) => {
-        const fullName = `${order.name || ''} ${order.surname || ''}`.toLowerCase();
+        const fullName = `${order.firstName || order.name || ''} ${order.lastName || order.surname || ''}`.toLowerCase();
         const email = (order.email || '').toLowerCase();
         const orderId = (order.id || '').toLowerCase();
         return fullName.includes(search) || email.includes(search) || orderId.includes(search);
@@ -142,8 +142,8 @@ export default function OrdersPage() {
           bVal = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
           break;
         case 'name':
-          aVal = `${a.name || ''} ${a.surname || ''}`.toLowerCase();
-          bVal = `${b.name || ''} ${b.surname || ''}`.toLowerCase();
+          aVal = `${a.firstName || a.name || ''} ${a.lastName || a.surname || ''}`.toLowerCase();
+          bVal = `${b.firstName || b.name || ''} ${b.lastName || b.surname || ''}`.toLowerCase();
           break;
         case 'amount':
           aVal = a.amountPaid || 0;
@@ -208,8 +208,8 @@ export default function OrdersPage() {
 
     const data = filteredOrders.map((order) => ({
       orderId: getShortOrderId(order.id),
-      name: order.name || '',
-      surname: order.surname || '',
+      name: order.firstName || order.name || '',
+      surname: order.lastName || order.surname || '',
       email: order.email || '',
       eventTitle: order.eventTitle || '',
       ticketName: order.ticketName || 'General Admission',
@@ -235,8 +235,8 @@ export default function OrdersPage() {
 
     const data = filteredOrders.map((order) => ({
       orderId: getShortOrderId(order.id),
-      name: order.name || '',
-      surname: order.surname || '',
+      name: order.firstName || order.name || '',
+      surname: order.lastName || order.surname || '',
       email: order.email || '',
       eventTitle: order.eventTitle || '',
       ticketName: order.ticketName || 'General Admission',
@@ -494,7 +494,7 @@ export default function OrdersPage() {
                       <td className="px-6 py-4">
                         <div>
                           <p className="font-medium text-gray-900">
-                            {order.name} {order.surname}
+                            {order.firstName || order.name} {order.lastName || order.surname}
                           </p>
                           <a
                             href={`mailto:${order.email}`}

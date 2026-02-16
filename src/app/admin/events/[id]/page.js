@@ -93,7 +93,7 @@ export default function EventDetailPage() {
     .filter((a) => {
       if (!searchTerm.trim()) return true;
       const search = searchTerm.toLowerCase();
-      const fullName = `${a.name || ''} ${a.surname || ''}`.toLowerCase();
+      const fullName = `${a.firstName || a.name || ''} ${a.lastName || a.surname || ''}`.toLowerCase();
       const email = (a.email || '').toLowerCase();
       return fullName.includes(search) || email.includes(search);
     })
@@ -105,8 +105,8 @@ export default function EventDetailPage() {
           bVal = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
           break;
         case 'name':
-          aVal = `${a.name || ''} ${a.surname || ''}`.toLowerCase();
-          bVal = `${b.name || ''} ${b.surname || ''}`.toLowerCase();
+          aVal = `${a.firstName || a.name || ''} ${a.lastName || a.surname || ''}`.toLowerCase();
+          bVal = `${b.firstName || b.name || ''} ${b.lastName || b.surname || ''}`.toLowerCase();
           break;
         case 'amount':
           aVal = a.amountPaid || 0;
@@ -556,7 +556,7 @@ export default function EventDetailPage() {
                 {filteredAttendees.map((attendee) => (
                   <tr key={attendee.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
-                      {attendee.name} {attendee.surname}
+                      {attendee.firstName || attendee.name} {attendee.lastName || attendee.surname}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <a href={`mailto:${attendee.email}`} className="text-indigo-600 hover:underline">

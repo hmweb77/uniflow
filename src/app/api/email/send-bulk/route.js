@@ -55,7 +55,7 @@ export async function POST(request) {
               </div>
               
               <div style="background: white; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
-                <p style="font-size: 16px; margin-bottom: 16px;">Hi ${attendee.name || 'there'},</p>
+                <p style="font-size: 16px; margin-bottom: 16px;">Hi ${attendee.firstName || attendee.name || 'there'},</p>
                 <div style="white-space: pre-wrap; color: #4b5563;">${body}</div>
               </div>
               
@@ -65,7 +65,7 @@ export async function POST(request) {
             </body>
             </html>
           `,
-          textContent: `Hi ${attendee.name || 'there'},\n\n${body}\n\n---\nUniflow`,
+          textContent: `Hi ${attendee.firstName || attendee.name || 'there'},\n\n${body}\n\n---\nUniflow`,
         });
         return { email: attendee.email, success: true };
       } catch (err) {

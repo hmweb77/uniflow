@@ -1,6 +1,7 @@
 // src/app/api/checkout/route.js
 // Checkout API - handles paid (Stripe) and free registrations
 // Updated: promo codes, campus field, custom fields support
+// FIXED: Custom field metadata keys exceeding Stripe's 40-char limit
 
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
@@ -98,19 +99,17 @@ export async function POST(request) {
             discountAmount = Math.min(promo.discountValue, unitPrice);
           }
           appliedPromo = { id: promoDoc.id, code: promo.code, discountAmount };
-
-          // Increment used count
-          await promoDoc.ref.update({ usedCount: FieldValue.increment(1) });
+          // Used count: free path increments below when creating attendee; paid path increments in webhook via promoId
         }
       }
     }
 
     const finalPrice = Math.max(0, unitPrice - discountAmount);
 
-    // Base metadata
+    // Base metadata (Stripe has a 40-char key limit and 500-char value limit)
     const metadata = {
       eventId,
-      eventTitle: event.title,
+      eventTitle: event.title?.substring(0, 500) || '',
       firstName,
       lastName,
       email: email.toLowerCase(),
@@ -119,20 +118,34 @@ export async function POST(request) {
       locale,
       campus: campus || '',
       promoCode: appliedPromo?.code || '',
+      ...(appliedPromo?.id && { promoId: appliedPromo.id }),
       discountAmount: discountAmount.toString(),
     };
 
-    // Store custom field values in metadata
+    // Store custom field values as a single JSON string in metadata
+    // This avoids the 40-char key limit issue with long UUID field IDs
     if (customFieldValues && typeof customFieldValues === 'object') {
+      const filteredValues = {};
       Object.entries(customFieldValues).forEach(([key, value]) => {
         if (typeof value === 'string' && value.trim()) {
-          metadata[`custom_${key}`] = value.trim().substring(0, 500);
+          filteredValues[key] = value.trim().substring(0, 200);
         }
       });
+      if (Object.keys(filteredValues).length > 0) {
+        const jsonStr = JSON.stringify(filteredValues);
+        // Stripe metadata values can be up to 500 chars
+        metadata.customFields = jsonStr.substring(0, 500);
+      }
     }
 
     // FREE event path
     if (finalPrice === 0) {
+      // Parse customFields back for storage
+      let parsedCustomFields = {};
+      if (customFieldValues && typeof customFieldValues === 'object') {
+        parsedCustomFields = customFieldValues;
+      }
+
       const attendeeData = {
         eventId,
         eventTitle: event.title,
@@ -146,13 +159,18 @@ export async function POST(request) {
         discountAmount,
         promoCode: appliedPromo?.code || null,
         campus: campus || null,
-        customFields: customFieldValues || {},
+        customFields: parsedCustomFields,
         status: 'confirmed',
         paymentStatus: finalPrice === 0 && unitPrice === 0 ? 'free' : 'promo_free',
         createdAt: FieldValue.serverTimestamp(),
       };
 
       await adminDb.collection('attendees').add(attendeeData);
+
+      // Increment promo used count for free registration (paid path is incremented in webhook)
+      if (appliedPromo?.id) {
+        await adminDb.collection('promos').doc(appliedPromo.id).update({ usedCount: FieldValue.increment(1) });
+      }
 
       // Update event counters
       await adminDb.collection('events').doc(eventId).update({

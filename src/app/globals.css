@@ -443,3 +443,51 @@ body {
 .dark .event-detail-page textarea.input::placeholder {
   color: rgba(255,255,255,0.4) !important;
 }
+
+/* ============================================
+   ADD THIS TO THE END OF globals.css
+   FIX: Registration button contrast in dark mode
+   ============================================ */
+
+/* Registration form submit button — always high contrast */
+.dark .event-detail-page .event-registration-form .btn-primary,
+.dark .event-detail-page .event-ticket-card .btn-primary {
+  background: linear-gradient(135deg, #5b7cfa 0%, #3b5fe8 50%, #6366f1 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4) !important;
+  border: none !important;
+}
+.dark .event-detail-page .event-registration-form .btn-primary:hover:not(:disabled),
+.dark .event-detail-page .event-ticket-card .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.55) !important;
+  transform: translateY(-1px);
+}
+.dark .event-detail-page .event-registration-form .btn-primary:disabled,
+.dark .event-detail-page .event-ticket-card .btn-primary:disabled {
+  opacity: 0.5;
+  box-shadow: none !important;
+}
+
+/* Apply promo button — visible in dark mode */
+.dark .event-detail-page .event-registration-form .btn-secondary {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+.dark .event-detail-page .event-registration-form .btn-secondary:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Total price bar — better contrast */
+.dark .event-detail-page .event-registration-form div[style*="bg-tertiary"] {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* "Continue" button on ticket card before form opens */
+.dark .event-detail-page .event-ticket-card > .p-4 > .btn-primary {
+  background: linear-gradient(135deg, #5b7cfa 0%, #3b5fe8 50%, #6366f1 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4) !important;
+}

@@ -1,5 +1,6 @@
 // src/components/RegistrationForm.js
 // Registration form with campus selection, promo codes, and custom fields
+// FIXED: Handles checkout API call internally when onSuccess/onError are provided
 
 'use client';
 
@@ -10,6 +11,8 @@ export default function RegistrationForm({
   selectedTicket,
   locale = 'en',
   onSubmit,
+  onSuccess,
+  onError,
   loading: externalLoading,
 }) {
   const [firstName, setFirstName] = useState('');
@@ -22,6 +25,7 @@ export default function RegistrationForm({
   const [promoDiscount, setPromoDiscount] = useState(null);
   const [customFieldValues, setCustomFieldValues] = useState({});
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const isEnglish = locale === 'en';
 
@@ -86,7 +90,7 @@ export default function RegistrationForm({
     return Math.max(0, basePrice - promoDiscount.discountValue);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -95,8 +99,21 @@ export default function RegistrationForm({
       return;
     }
 
+    // Validate email domain if restricted
+    if (event?.emailDomain) {
+      const allowedDomains = event.emailDomain.split(',').map((d) => d.trim().toLowerCase());
+      const emailDomain = email.trim().split('@')[1]?.toLowerCase();
+      if (!allowedDomains.includes(emailDomain)) {
+        const domainError = isEnglish
+          ? `Registration is restricted to @${event.emailDomain} email addresses`
+          : `L'inscription est réservée aux adresses @${event.emailDomain}`;
+        setError(domainError);
+        return;
+      }
+    }
+
     if (event?.campusRequired && !campus) {
-      setError(isEnglish ? 'Please select your campus' : 'Veuillez selectionner votre campus');
+      setError(isEnglish ? 'Please select your campus' : 'Veuillez sélectionner votre campus');
       return;
     }
 
@@ -110,18 +127,82 @@ export default function RegistrationForm({
       }
     }
 
-    onSubmit({
+    const formData = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.trim().toLowerCase(),
       campus,
       promoCode: promoStatus === 'valid' ? promoCode.trim() : '',
       customFieldValues,
-    });
+    };
+
+    // If legacy onSubmit prop is provided, use it
+    if (onSubmit) {
+      onSubmit(formData);
+      return;
+    }
+
+    // Otherwise, call the checkout API directly
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: event.id,
+          ticketId: selectedTicket?.id || null,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          locale,
+          promoCode: formData.promoCode,
+          campus: formData.campus,
+          customFieldValues: formData.customFieldValues,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const errMsg = data.error || (isEnglish ? 'Registration failed. Please try again.' : "L'inscription a échoué. Veuillez réessayer.");
+        setError(errMsg);
+        if (onError) onError(errMsg);
+        return;
+      }
+
+      // Free event — redirect to success page
+      if (data.type === 'free' && data.redirectUrl) {
+        if (onSuccess) {
+          onSuccess(data.redirectUrl);
+        } else {
+          window.location.href = data.redirectUrl;
+        }
+        return;
+      }
+
+      // Paid event — redirect to Stripe checkout
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      // Fallback error
+      const fallbackErr = isEnglish ? 'Something went wrong. Please try again.' : "Une erreur s'est produite. Veuillez réessayer.";
+      setError(fallbackErr);
+      if (onError) onError(fallbackErr);
+    } catch (err) {
+      console.error('[RegistrationForm] Checkout error:', err);
+      const errMsg = isEnglish ? 'Network error. Please check your connection and try again.' : 'Erreur réseau. Vérifiez votre connexion et réessayez.';
+      setError(errMsg);
+      if (onError) onError(errMsg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const finalPrice = getDiscountedPrice();
   const basePrice = selectedTicket?.price ?? event?.price ?? 0;
+  const isLoading = externalLoading || submitting;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -137,7 +218,7 @@ export default function RegistrationForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-            {isEnglish ? 'First Name' : 'Prenom'} *
+            {isEnglish ? 'First Name' : 'Prénom'} *
           </label>
           <input
             type="text"
@@ -145,7 +226,7 @@ export default function RegistrationForm({
             onChange={(e) => setFirstName(e.target.value)}
             required
             className="input w-full"
-            placeholder={isEnglish ? 'First name' : 'Prenom'}
+            placeholder={isEnglish ? 'First name' : 'Prénom'}
           />
         </div>
         <div>
@@ -177,7 +258,7 @@ export default function RegistrationForm({
         />
         {event?.emailDomain && (
           <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-            {isEnglish ? `Must be a @${event.emailDomain} address` : `Doit etre une adresse @${event.emailDomain}`}
+            {isEnglish ? `Must be a @${event.emailDomain} address` : `Doit être une adresse @${event.emailDomain}`}
           </p>
         )}
       </div>
@@ -194,7 +275,7 @@ export default function RegistrationForm({
             required
             className="input w-full"
           >
-            <option value="">{isEnglish ? 'Select your campus' : 'Selectionnez votre campus'}</option>
+            <option value="">{isEnglish ? 'Select your campus' : 'Sélectionnez votre campus'}</option>
             {campuses.map((c) => (
               <option key={c.id} value={c.name}>
                 {c.name}{c.city ? ` (${c.city})` : ''}
@@ -217,7 +298,7 @@ export default function RegistrationForm({
               required={field.required}
               className="input w-full"
             >
-              <option value="">{isEnglish ? 'Select...' : 'Selectionner...'}</option>
+              <option value="">{isEnglish ? 'Select...' : 'Sélectionner...'}</option>
               {(field.options || []).map((opt) => (
                 <option key={opt} value={opt}>{opt}</option>
               ))}
@@ -263,10 +344,8 @@ export default function RegistrationForm({
               type="button"
               onClick={() => validatePromo(promoCode)}
               disabled={!promoCode.trim() || promoStatus === 'checking'}
-              className="px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+              className="px-4 py-2 rounded-lg font-medium text-sm transition-colors btn-secondary"
               style={{
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
                 border: '1px solid var(--border-default)',
               }}
             >
@@ -282,7 +361,7 @@ export default function RegistrationForm({
           )}
           {promoStatus === 'invalid' && (
             <p className="text-xs mt-1 text-red-500">
-              {isEnglish ? 'Invalid or expired promo code' : 'Code promo invalide ou expire'}
+              {isEnglish ? 'Invalid or expired promo code' : 'Code promo invalide ou expiré'}
             </p>
           )}
         </div>
@@ -319,11 +398,10 @@ export default function RegistrationForm({
       {/* Submit */}
       <button
         type="submit"
-        disabled={externalLoading}
-        className="w-full py-3 rounded-lg font-semibold text-white transition-colors disabled:opacity-50"
-        style={{ backgroundColor: '#1a1a2e' }}
+        disabled={isLoading}
+        className="w-full btn btn-primary btn-lg disabled:opacity-50"
       >
-        {externalLoading
+        {isLoading
           ? (isEnglish ? 'Processing...' : 'Traitement...')
           : finalPrice === 0
             ? (isEnglish ? 'Register (Free)' : "S'inscrire (Gratuit)")
