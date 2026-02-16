@@ -13,13 +13,15 @@ function SuccessContent() {
   const { locale, setLocale, t } = useLocale();
   const [eventId, setEventId] = useState(null);
   const [showCalendarOptions, setShowCalendarOptions] = useState(false);
+  const categoryId = searchParams.get('category');
+  const categoryName = searchParams.get('categoryName') ? decodeURIComponent(searchParams.get('categoryName')) : null;
 
   const s = t.success || {};
+  const categoryLabel = categoryName || categoryId;
 
   useEffect(() => {
     const lang = searchParams.get('lang');
     const event = searchParams.get('event');
-    const category = searchParams.get('category');
     if (lang && (lang === 'en' || lang === 'fr')) setLocale(lang);
     if (event) setEventId(event);
   }, [searchParams, setLocale]);
@@ -92,7 +94,7 @@ function SuccessContent() {
               <p style={{ color: '#6e6e80', fontSize: '13px', margin: 0, textAlign: 'center' }}>
                 {locale === 'fr'
                   ? 'Si vous ne trouvez pas l\'email, pensez a verifier votre dossier spam ou courrier indesirable.'
-                  : 'If you don\'t see the email, please check your spam or junk folder.'}
+                  : 'If you don\'t see the email, please check your spam folder.'}
               </p>
             </div>
 
@@ -192,18 +194,39 @@ function SuccessContent() {
 
             {/* Action Buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {categoryId ? (
+                <Link
+                  href={`/classes?category=${encodeURIComponent(categoryId)}`}
+                  style={{
+                    display: 'block',
+                    padding: '14px',
+                    backgroundColor: '#1a1a2e',
+                    color: '#ffffff',
+                    textAlign: 'center',
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    fontSize: '15px',
+                  }}
+                >
+                  {locale === 'fr'
+                    ? (categoryLabel ? `Voir plus de cours ${categoryLabel}` : 'Voir les cours de cette catégorie')
+                    : (categoryLabel ? `View more ${categoryLabel} classes` : 'View more in this category')}
+                </Link>
+              ) : null}
               <Link
                 href="/classes"
                 style={{
                   display: 'block',
                   padding: '14px',
-                  backgroundColor: '#1a1a2e',
-                  color: '#ffffff',
+                  backgroundColor: categoryId ? '#f5f5f7' : '#1a1a2e',
+                  color: categoryId ? '#48485c' : '#ffffff',
                   textAlign: 'center',
                   borderRadius: '8px',
                   textDecoration: 'none',
                   fontWeight: 600,
                   fontSize: '15px',
+                  border: categoryId ? '1px solid #e8e8ed' : 'none',
                 }}
               >
                 {locale === 'fr' ? 'Voir tous les cours' : 'View All Classes'}

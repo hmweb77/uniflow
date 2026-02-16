@@ -11,6 +11,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import LocaleToggle from '@/components/ui/LocaleToggle';
 import RegistrationForm from '@/components/RegistrationForm';
 import { cleanDashes } from '@/utils/textCleanup';
+import { renderDescription } from '@/utils/descriptionFormat';
 
 export default function PublicEventPage() {
   const params = useParams();
@@ -103,6 +104,12 @@ export default function PublicEventPage() {
     return date < new Date();
   })();
 
+  // ─── Sold out (manual flag or max tickets reached) ─────────
+  const attendeeCount = event?.attendeeCount ?? 0;
+  const maxTickets = event?.maxTickets != null ? Number(event.maxTickets) : null;
+  const isSoldOut = event?.soldOut === true || (maxTickets != null && attendeeCount >= maxTickets);
+  const registrationClosed = isPastEvent || isSoldOut;
+
   // ─── Loading ───────────────────────────────────────────────
   if (loading) {
     return (
@@ -183,8 +190,8 @@ export default function PublicEventPage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 md:py-10">
-        {/* ─── Past event banner ─────────────────────────── */}
-        {isPastEvent && (
+        {/* ─── Past event / Sold out banner ───────────────── */}
+        {(isPastEvent || isSoldOut) && (
           <div
             className="event-card rounded-xl p-4 mb-6 flex items-center gap-3"
             style={{
@@ -198,12 +205,16 @@ export default function PublicEventPage() {
                 className="font-semibold text-sm"
                 style={{ color: 'var(--text-primary)' }}
               >
-                {locale === 'fr' ? 'Événement terminé' : 'Event Ended'}
+                {isSoldOut && !isPastEvent
+                  ? (locale === 'fr' ? 'Complet' : 'Sold Out')
+                  : (locale === 'fr' ? 'Événement terminé' : 'Event Ended')}
               </p>
               <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                {locale === 'fr'
-                  ? 'Cet événement a déjà eu lieu. Les inscriptions sont fermées.'
-                  : 'This event has already taken place. Registration is closed.'}
+                {isSoldOut && !isPastEvent
+                  ? (locale === 'fr' ? 'Les places sont épuisées. Inscriptions fermées.' : 'All spots are taken. Registration is closed.')
+                  : (locale === 'fr'
+                    ? 'Cet événement a déjà eu lieu. Les inscriptions sont fermées.'
+                    : 'This event has already taken place. Registration is closed.')}
               </p>
             </div>
           </div>
@@ -279,41 +290,50 @@ export default function PublicEventPage() {
             </p>
           )}
 
-          {/* Date & Time */}
-          <div className="flex items-center gap-5" style={{ color: 'var(--text-secondary)' }}>
-            <div className="flex items-center gap-2 text-sm">
-              <svg
-                className="w-4 h-4 flex-shrink-0"
-                style={{ color: 'var(--text-tertiary)' }}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="1.5"
+          {/* Date & Time — prominent */}
+          <div
+            className="flex items-center gap-6 py-4 px-5 rounded-xl"
+            style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-light)',
+            }}
+          >
+            <div className="flex items-center gap-3" style={{ color: 'var(--text-primary)' }}>
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-tertiary)' }}
               >
-                <rect x="3" y="4" width="18" height="18" rx="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              <span>{formatDate(event.date)}</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+                  {locale === 'fr' ? 'Date' : 'Date'}
+                </p>
+                <p className="text-lg font-semibold leading-tight">{formatDate(event.date)}</p>
+              </div>
             </div>
-            <div
-              className="w-px h-4"
-              style={{ backgroundColor: 'var(--border-default)' }}
-            />
-            <div className="flex items-center gap-2 text-sm">
-              <svg
-                className="w-4 h-4 flex-shrink-0"
-                style={{ color: 'var(--text-tertiary)' }}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="1.5"
+            <div className="w-px h-12" style={{ backgroundColor: 'var(--border-default)' }} />
+            <div className="flex items-center gap-3" style={{ color: 'var(--text-primary)' }}>
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-tertiary)' }}
               >
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              <span>{formatTime(event.date)}</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+                  {locale === 'fr' ? 'Heure' : 'Time'}
+                </p>
+                <p className="text-lg font-semibold leading-tight">{formatTime(event.date)}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -325,7 +345,7 @@ export default function PublicEventPage() {
             {/* Description */}
             {event.description && (
               <div
-                className="event-card rounded-xl p-5 border"
+                className="event-card rounded-xl p-5 border event-description"
                 style={{
                   backgroundColor: 'var(--bg-primary)',
                   borderColor: 'var(--border-light)',
@@ -337,12 +357,11 @@ export default function PublicEventPage() {
                 >
                   {t.eventDetail?.about || 'About'}
                 </h2>
-                <p
-                  className="text-[15px] leading-relaxed whitespace-pre-wrap"
+                <div
+                  className="text-[15px] leading-relaxed event-description-content"
                   style={{ color: 'var(--text-secondary)' }}
-                >
-                  {cleanDashes(event.description)}
-                </p>
+                  dangerouslySetInnerHTML={{ __html: renderDescription(cleanDashes(event.description)) }}
+                />
               </div>
             )}
 
@@ -388,9 +407,9 @@ export default function PublicEventPage() {
               >
                 <h2
                   className="event-section-label text-sm font-semibold"
-                  style={{ color: isPastEvent ? 'var(--text-tertiary)' : 'var(--text-primary)' }}
+                  style={{ color: registrationClosed ? 'var(--text-tertiary)' : 'var(--text-primary)' }}
                 >
-                  {isPastEvent
+                  {registrationClosed
                     ? (locale === 'fr' ? 'Inscriptions fermées' : 'Registration Closed')
                     : (t.eventDetail?.bookYourSpot || 'Book your spot')}
                 </h2>
@@ -404,24 +423,24 @@ export default function PublicEventPage() {
                     <div
                       key={ticket.id}
                       onClick={() => {
-                        if (isPastEvent) return;
+                        if (registrationClosed) return;
                         setSelectedTicket(ticket);
                         setShowRegistration(true);
                       }}
                       className={`ticket-option relative p-4 rounded-lg border-2 transition-all duration-150 ${
                         isSelected ? 'ticket-option-selected' : ''
                       } ${
-                        isPastEvent
+                        registrationClosed
                           ? 'opacity-50 cursor-default'
                           : 'cursor-pointer'
                       }`}
                       style={{
-                        borderColor: isPastEvent
+                        borderColor: registrationClosed
                           ? 'var(--border-default)'
                           : isSelected
                             ? 'var(--text-primary)'
                             : 'var(--border-default)',
-                        backgroundColor: isPastEvent
+                        backgroundColor: registrationClosed
                           ? 'var(--bg-secondary)'
                           : isSelected
                             ? 'var(--bg-secondary)'
@@ -429,7 +448,7 @@ export default function PublicEventPage() {
                       }}
                     >
                       {/* Selection indicator — hidden for past events */}
-                      {!isPastEvent && (
+                      {!registrationClosed && (
                         <div
                           className={`ticket-option-indicator absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'ticket-option-indicator-selected' : ''}`}
                           style={{
@@ -456,10 +475,10 @@ export default function PublicEventPage() {
                         </div>
                       )}
 
-                      <div className={isPastEvent ? '' : 'pr-8'}>
+                      <div className={registrationClosed ? '' : 'pr-8'}>
                         <div className="flex items-baseline gap-2 mb-1">
                           <span
-                            className={`text-lg font-bold ${isPastEvent ? 'line-through' : ''}`}
+                            className={`text-lg font-bold ${registrationClosed ? 'line-through' : ''}`}
                             style={{ color: 'var(--text-primary)' }}
                           >
                             {ticket.price} €
@@ -519,17 +538,19 @@ export default function PublicEventPage() {
               )}
 
               {/* ─── Past event notice ─────────────────────── */}
-              {isPastEvent && (
+              {registrationClosed && (
                 <div
                   className="p-5 text-center border-t"
                   style={{ borderColor: 'var(--border-light)' }}
                 >
-                  <div className="text-3xl mb-2">🔒</div>
+                 
                   <p
-                    className="text-sm font-medium mb-1"
+                    className="text-xl font-medium mb-1"
                     style={{ color: 'var(--text-primary)' }}
                   >
-                    {locale === 'fr' ? 'Événement terminé' : 'Event has ended'}
+                    {isSoldOut && !isPastEvent
+                      ? (locale === 'fr' ? 'Complet' : 'Sold out')
+                      : (locale === 'fr' ? 'Événement terminé' : 'Event has ended')}
                   </p>
                   <p
                     className="text-xs"
@@ -542,15 +563,14 @@ export default function PublicEventPage() {
                 </div>
               )}
 
-              {/* ─── Registration Form (only for upcoming events) ── */}
-              {!isPastEvent && showRegistration && selectedTicket && (
+              {/* ─── Registration Form (only when not closed) ── */}
+              {!registrationClosed && showRegistration && selectedTicket && (
                 <div className="event-registration-form border-t p-5" style={{ borderColor: 'var(--border-light)' }}>
                 <RegistrationForm
                   event={event}
                   selectedTicket={selectedTicket}
                   locale={locale}
                   t={t}
-                  isPastEvent={isPastEvent}
                   onSuccess={(url) => { window.location.href = url; }}
                   onError={setError}
                 />
@@ -558,7 +578,7 @@ export default function PublicEventPage() {
               )}
 
               {/* Not yet selected — prompt (only for upcoming events) */}
-              {!isPastEvent && !showRegistration && tickets.length > 0 && (
+              {!registrationClosed && !showRegistration && tickets.length > 0 && (
                 <div className="p-4 pt-0">
                   <button
                     onClick={() => {

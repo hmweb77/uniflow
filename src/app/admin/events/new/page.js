@@ -34,6 +34,8 @@ export default function NewEventPage() {
     campusRequired: false,
     feedbackFormUrl: '',
     shareImageUrl: '',
+    soldOut: false,
+    maxTickets: '',
   });
 
   const [tickets, setTickets] = useState([{ ...DEFAULT_TICKET, id: crypto.randomUUID() }]);
@@ -178,6 +180,8 @@ export default function NewEventPage() {
         campusRequired: formData.campusRequired,
         feedbackFormUrl: formData.feedbackFormUrl.trim(),
         shareImageUrl: formData.shareImageUrl.trim(),
+        soldOut: formData.soldOut === true,
+        maxTickets: formData.maxTickets.trim() === '' ? null : parseInt(formData.maxTickets, 10) || null,
         customFields: processedCustomFields,
         tickets: processedTickets,
         price: processedTickets[0]?.price || 0,
@@ -241,9 +245,13 @@ export default function NewEventPage() {
                 name="description"
                 value={formData.description}
                 onChange={handleInputChange}
-                rows={4}
+                rows={5}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                placeholder="You can use formatting: **bold**, *italic*, and titles with # Main title, ## Subtitle, ### Small heading"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Formatting: <code className="bg-gray-100 px-1 rounded">**bold**</code> <code className="bg-gray-100 px-1 rounded">*italic*</code> <code className="bg-gray-100 px-1 rounded"># Title</code> <code className="bg-gray-100 px-1 rounded">## Subtitle</code> — or paste from Word/Google Docs (bold/italic kept).
+              </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -320,6 +328,14 @@ export default function NewEventPage() {
             <div className="flex items-center gap-2">
               <input type="checkbox" id="campusRequired" name="campusRequired" checked={formData.campusRequired} onChange={handleInputChange} className="rounded" />
               <label htmlFor="campusRequired" className="text-sm text-gray-700">Require campus selection during registration</label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="soldOut" checked={formData.soldOut} onChange={(e) => setFormData((prev) => ({ ...prev, soldOut: e.target.checked }))} className="rounded" />
+              <label htmlFor="soldOut" className="text-sm text-gray-700">Mark as sold out</label>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Max tickets (optional)</label>
+              <input type="number" min="0" name="maxTickets" value={formData.maxTickets} onChange={(e) => setFormData((prev) => ({ ...prev, maxTickets: e.target.value }))} className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Unlimited" />
             </div>
           </div>
         </section>

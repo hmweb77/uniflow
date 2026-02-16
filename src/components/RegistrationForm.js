@@ -367,6 +367,13 @@ export default function RegistrationForm({
         </div>
       )}
 
+      {/* Check spam notice */}
+      <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+        {isEnglish
+          ? "We'll send your confirmation to this email. If you don't see it, please check your spam folder."
+          : "Nous enverrons la confirmation à cet email. Si vous ne la voyez pas, vérifiez vos spams."}
+      </p>
+
       {/* Price Display */}
       {basePrice > 0 && (
         <div

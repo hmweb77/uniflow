@@ -269,7 +269,7 @@ export function getConfirmationEmailTemplate({
     <div style="background: #f5f5f7; border-radius: 6px; padding: 14px; margin: 0 0 8px 0; text-align: center;">
       <p style="color: #6e6e80; font-size: 13px; margin: 0;">
         ${isEnglish
-          ? 'Did not receive this email? Please check your spam or junk folder.'
+          ? 'Did not receive this email? Please check your spam folder.'
           : "Vous n'avez pas recu cet email ? Verifiez votre dossier spam ou courrier indesirable."
         }
       </p>

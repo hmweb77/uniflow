@@ -36,6 +36,16 @@ export async function POST(request) {
     }
     const event = eventDoc.data();
 
+    // Sold out or at capacity
+    const attendeeCount = event.attendeeCount ?? 0;
+    const maxTickets = event.maxTickets != null ? Number(event.maxTickets) : null;
+    if (event.soldOut === true) {
+      return NextResponse.json({ error: 'This event is sold out' }, { status: 400 });
+    }
+    if (maxTickets != null && attendeeCount >= maxTickets) {
+      return NextResponse.json({ error: 'This event is sold out' }, { status: 400 });
+    }
+
     // Check email domain restriction
     if (event.emailDomain) {
       const allowedDomains = event.emailDomain.split(',').map((d) => d.trim().toLowerCase());
@@ -218,14 +228,15 @@ export async function POST(request) {
         console.error('[CHECKOUT] Email send failed (non-blocking):', emailErr.message);
       }
 
-      // Determine redirect based on category
-      let redirectCategory = '';
-      if (event.category) redirectCategory = `&category=${event.category}`;
+      // Redirect with category for success page (category-based CTA)
+      let redirectQuery = `event=${eventId}&lang=${locale}`;
+      if (event.category) redirectQuery += `&category=${encodeURIComponent(event.category)}`;
+      if (event.categoryName) redirectQuery += `&categoryName=${encodeURIComponent(event.categoryName)}`;
 
       return NextResponse.json({
         success: true,
         type: 'free',
-        redirectUrl: `/success?event=${eventId}&lang=${locale}${redirectCategory}`,
+        redirectUrl: `/success?${redirectQuery}`,
       });
     }
 
@@ -250,13 +261,15 @@ export async function POST(request) {
       },
     ];
 
+    const successCategory = event.category ? `&category=${encodeURIComponent(event.category)}` : '';
+    const successCategoryName = event.categoryName ? `&categoryName=${encodeURIComponent(event.categoryName)}` : '';
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
       line_items: lineItems,
       metadata,
       customer_email: email,
-      success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}&event=${eventId}&lang=${locale}`,
+      success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}&event=${eventId}&lang=${locale}${successCategory}${successCategoryName}`,
       cancel_url: `${appUrl}/e/${event.slug}?cancelled=true`,
       locale: locale === 'fr' ? 'fr' : 'en',
     });

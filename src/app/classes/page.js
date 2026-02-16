@@ -3,7 +3,8 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import Link from 'next/link';
@@ -26,13 +27,19 @@ function getLowestPrice(event) {
   return event.price || 0;
 }
 
-export default function ClassesPage() {
+function ClassesContent() {
+  const searchParams = useSearchParams();
   const { locale, t } = useLocale();
   const [events, setEvents] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const categoryFromUrl = searchParams.get('category');
+    if (categoryFromUrl) setActiveCategory(categoryFromUrl);
+  }, [searchParams]);
 
   useEffect(() => {
     fetchData();
@@ -187,17 +194,7 @@ export default function ClassesPage() {
         <div className="mb-8 space-y-4">
           {/* Search */}
           <div className="relative max-w-md">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-              style={{ color: 'var(--text-tertiary)' }}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
+            
             <input
               type="text"
               placeholder={locale === 'fr' ? 'Rechercher un cours...' : 'Search classes...'}
@@ -414,5 +411,21 @@ function ClassCard({ event, locale, formatDate, formatTime }) {
         )}
       </div>
     </Link>
+  );
+}
+
+function ClassesFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+      <div className="w-8 h-8 border-[3px] rounded-full animate-spin" style={{ borderColor: 'var(--border-default)', borderTopColor: 'var(--color-primary-500)' }} />
+    </div>
+  );
+}
+
+export default function ClassesPage() {
+  return (
+    <Suspense fallback={<ClassesFallback />}>
+      <ClassesContent />
+    </Suspense>
   );
 }

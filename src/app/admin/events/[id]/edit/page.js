@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 import { useImageUpload } from '../../../../hooks/useImageUpload';
 import Link from 'next/link';
@@ -26,6 +26,7 @@ export default function EditEventPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [categories, setCategories] = useState([]);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -38,9 +39,17 @@ export default function EditEventPage() {
     format: 'live',
     whoThisIsFor: '',
     emailDomain: '',
+    visibility: 'public',
+    category: '',
+    campusRequired: false,
+    feedbackFormUrl: '',
+    shareImageUrl: '',
+    soldOut: false,
+    maxTickets: '',
   });
 
   const [tickets, setTickets] = useState([]);
+  const [customFields, setCustomFields] = useState([]);
   const [bannerPreview, setBannerPreview] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [existingBanner, setExistingBanner] = useState('');
@@ -53,6 +62,12 @@ export default function EditEventPage() {
   useEffect(() => {
     if (eventId) fetchEvent();
   }, [eventId]);
+
+  useEffect(() => {
+    getDocs(collection(db, 'categories'))
+      .then((snap) => setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order || 0) - (b.order || 0))))
+      .catch(() => {});
+  }, []);
 
   const fetchEvent = async () => {
     try {
@@ -72,6 +87,13 @@ export default function EditEventPage() {
           format: data.format || 'live',
           whoThisIsFor: data.whoThisIsFor || '',
           emailDomain: data.emailDomain || '',
+          visibility: data.visibility || 'public',
+          category: data.category || '',
+          campusRequired: data.campusRequired === true,
+          feedbackFormUrl: data.feedbackFormUrl || '',
+          shareImageUrl: data.shareImageUrl || '',
+          soldOut: data.soldOut === true,
+          maxTickets: data.maxTickets != null ? String(data.maxTickets) : '',
         });
 
         if (data.tickets?.length > 0) {
@@ -80,6 +102,12 @@ export default function EditEventPage() {
           setTickets([{ id: crypto.randomUUID(), name: 'General Admission', price: data.price.toString(), description: '', includes: [], includesText: '' }]);
         } else {
           setTickets([{ ...DEFAULT_TICKET, id: crypto.randomUUID() }]);
+        }
+
+        if (data.customFields?.length) {
+          setCustomFields(data.customFields.map((f) => ({ ...f, options: Array.isArray(f.options) ? f.options.join(', ') : (f.options || '') })));
+        } else {
+          setCustomFields([]);
         }
 
         setExistingBanner(data.bannerUrl || '');
@@ -142,6 +170,14 @@ export default function EditEventPage() {
     setTickets(tickets.map((t) => (t.id === id ? { ...t, includes: arr, includesText: text } : t)));
   };
 
+  const addCustomField = () => {
+    setCustomFields([...customFields, { id: crypto.randomUUID(), label: '', type: 'text', required: false, options: '' }]);
+  };
+  const updateCustomField = (id, field, value) => {
+    setCustomFields(customFields.map((f) => (f.id === id ? { ...f, [field]: value } : f)));
+  };
+  const removeCustomField = (id) => setCustomFields(customFields.filter((f) => f.id !== id));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -175,6 +211,19 @@ export default function EditEventPage() {
         order: i,
       }));
 
+      const selectedCat = categories.find((c) => c.id === formData.category);
+      const processedCustomFields = customFields
+        .filter((f) => f.label?.trim())
+        .map((f) => ({
+          id: f.id,
+          label: f.label.trim(),
+          type: f.type || 'text',
+          required: !!f.required,
+          options: f.type === 'select' ? (f.options || '').split(',').map((o) => o.trim()).filter(Boolean) : [],
+        }));
+
+      const maxTicketsNum = formData.maxTickets.trim() === '' ? null : parseInt(formData.maxTickets, 10);
+
       await updateDoc(doc(db, 'events', eventId), {
         title: formData.title,
         description: formData.description,
@@ -185,6 +234,15 @@ export default function EditEventPage() {
         date: eventDateTime,
         meetingLink: formData.meetingLink,
         language: formData.language,
+        visibility: formData.visibility,
+        category: formData.category || '',
+        categoryName: selectedCat?.name || '',
+        campusRequired: formData.campusRequired,
+        feedbackFormUrl: formData.feedbackFormUrl.trim(),
+        shareImageUrl: formData.shareImageUrl.trim(),
+        customFields: processedCustomFields,
+        soldOut: formData.soldOut,
+        maxTickets: maxTicketsNum,
         bannerUrl,
         logoUrl,
         tickets: cleanedTickets,
@@ -233,7 +291,17 @@ export default function EditEventPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <textarea name="description" value={formData.description} onChange={handleInputChange} rows={4} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none resize-none" />
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleInputChange}
+              rows={5}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              placeholder="Use **bold**, *italic*, # Title, ## Subtitle, ### Heading — or paste from Word/Google Docs"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              Formatting: <code className="bg-gray-100 px-1 rounded">**bold**</code> <code className="bg-gray-100 px-1 rounded">*italic*</code> <code className="bg-gray-100 px-1 rounded"># Title</code> <code className="bg-gray-100 px-1 rounded">## Subtitle</code> — or paste rich text (bold/italic/headings kept).
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -256,6 +324,42 @@ export default function EditEventPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Who This Is For</label>
             <input type="text" name="whoThisIsFor" value={formData.whoThisIsFor} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Visibility</label>
+              <select name="visibility" value={formData.visibility} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="public">Public</option>
+                <option value="private">Private (hidden from listings)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+              <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">No category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="campusRequired" name="campusRequired" checked={formData.campusRequired} onChange={(e) => setFormData((prev) => ({ ...prev, campusRequired: e.target.checked }))} className="rounded" />
+            <label htmlFor="campusRequired" className="text-sm text-gray-700">Require campus selection during registration</label>
+          </div>
+        </div>
+
+        {/* Capacity: Sold out & Max tickets */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">Capacity</h2>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="soldOut" checked={formData.soldOut} onChange={(e) => setFormData((prev) => ({ ...prev, soldOut: e.target.checked }))} className="rounded" />
+            <label htmlFor="soldOut" className="text-sm font-medium text-gray-700">Mark as sold out (registration closed)</label>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Max tickets (optional)</label>
+            <input type="number" min="0" value={formData.maxTickets} onChange={(e) => setFormData((prev) => ({ ...prev, maxTickets: e.target.value }))} className="w-full max-w-xs px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Leave empty for unlimited" />
+            <p className="text-xs text-gray-400 mt-1">Registration will close automatically when this number is reached</p>
           </div>
         </div>
 
@@ -298,6 +402,47 @@ export default function EditEventPage() {
           ))}
         </div>
 
+        {/* Custom Registration Fields */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Custom Registration Fields</h2>
+            <button type="button" onClick={addCustomField} className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100">+ Add Field</button>
+          </div>
+          {customFields.length === 0 ? (
+            <p className="text-sm text-gray-400">No custom fields. Students fill in name and email only.</p>
+          ) : (
+            customFields.map((field) => (
+              <div key={field.id} className="p-4 border border-gray-200 rounded-lg flex flex-wrap items-end gap-3">
+                <div className="min-w-[140px]">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Label</label>
+                  <input type="text" value={field.label} onChange={(e) => updateCustomField(field.id, 'label', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="e.g., Phone" />
+                </div>
+                <div className="min-w-[100px]">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+                  <select value={field.type} onChange={(e) => updateCustomField(field.id, 'type', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="text">Text</option>
+                    <option value="email">Email</option>
+                    <option value="number">Number</option>
+                    <option value="select">Dropdown</option>
+                    <option value="textarea">Long text</option>
+                  </select>
+                </div>
+                {field.type === 'select' && (
+                  <div className="min-w-[160px]">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Options (comma-separated)</label>
+                    <input type="text" value={field.options || ''} onChange={(e) => updateCustomField(field.id, 'options', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="A, B, C" />
+                  </div>
+                )}
+                <label className="flex items-center gap-1 text-sm text-gray-600">
+                  <input type="checkbox" checked={!!field.required} onChange={(e) => updateCustomField(field.id, 'required', e.target.checked)} className="rounded" />
+                  Required
+                </label>
+                <button type="button" onClick={() => removeCustomField(field.id)} className="text-red-500 hover:text-red-700 text-sm">Remove</button>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* Date & Time */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
           <h2 className="text-lg font-semibold text-gray-900">Date & Time</h2>
@@ -322,9 +467,9 @@ export default function EditEventPage() {
           </div>
         </div>
 
-        {/* Email Restrictions */}
+        {/* Email Restrictions & Marketing */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-          <h2 className="text-lg font-semibold text-gray-900">Registration Settings</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Registration & Post-Event</h2>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Email Domain Restriction</label>
             <div className="flex items-center gap-2">
@@ -332,6 +477,15 @@ export default function EditEventPage() {
               <input type="text" value={formData.emailDomain.replace('@', '')} onChange={(e) => setFormData((prev) => ({ ...prev, emailDomain: e.target.value.replace('@', '') }))} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="edu.escp.eu" />
             </div>
             <p className="text-xs text-gray-400 mt-2">Leave empty to allow any email</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Feedback Form URL</label>
+            <input type="url" name="feedbackFormUrl" value={formData.feedbackFormUrl} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://forms.google.com/..." />
+            <p className="text-xs text-gray-400 mt-2">Included in post-event thank-you email</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Share Image URL (WhatsApp / social)</label>
+            <input type="url" name="shareImageUrl" value={formData.shareImageUrl} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="URL for share preview (defaults to banner)" />
           </div>
         </div>
 
