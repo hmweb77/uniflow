@@ -415,6 +415,9 @@ body {
   background-color: rgba(99,102,241,0.12) !important;
   border-color: rgba(99,102,241,0.25) !important;
 }
+.dark .event-detail-page .event-card-who-body {
+  color: var(--color-primary-50) !important;
+}
 .dark .event-detail-page .event-page-title {
   color: #ffffff !important;
 }

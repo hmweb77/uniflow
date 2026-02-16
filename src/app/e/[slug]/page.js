@@ -341,7 +341,7 @@ export default function PublicEventPage() {
               >
                 <h2
                   className="event-section-label text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: 'var(--text-tertiary)' }}
+                 
                 >
                   {t.eventDetail?.about || 'About'}
                 </h2>
@@ -369,8 +369,8 @@ export default function PublicEventPage() {
                   {t.eventDetail?.whoIsThisFor || 'Who is this for?'}
                 </h2>
                 <p
-                  className="text-[15px] leading-relaxed"
-                  style={{ color: 'var(--color-primary-800)' }}
+                  className="text-[15px] leading-relaxed event-card-who-body "
+            
                 >
                   {event.whoThisIsFor}
                 </p>
