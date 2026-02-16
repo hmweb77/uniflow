@@ -175,19 +175,7 @@ export default function PublicEventPage() {
 
   return (
     <div className="event-detail-page min-h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-      {/* ─── Top bar ───────────────────────────────────────── */}
-      <div
-        className="event-detail-topbar sticky top-0 z-50 glass border-b"
-        style={{ borderColor: 'var(--border-light)' }}
-      >
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-
-          <div className="flex items-center gap-1">
-            <LocaleToggle />
-            <ThemeToggle />
-          </div>
-        </div>
-      </div>
+   
 
       <div className="max-w-3xl mx-auto px-4 py-6 md:py-10">
         {/* ─── Past event / Sold out banner ───────────────── */}

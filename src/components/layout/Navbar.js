@@ -38,19 +38,14 @@ export default function Navbar() {
         {/* Logo — direct image */}
         <Link href="/" className="flex items-center group">
           <Image
-            src={theme === 'dark' ? '/logoB.png' : '/logg.png'}
+            src={theme === 'dark' ? '/newLog.png' : '/newLog.png'}
             alt="Uniflow"
-            width={44}
-            height={44}
+            width={56}
+            height={56}
             className="rounded-lg -mr-1"
             priority
           />
-          <span
-            className="text-xl font-bold tracking-tight"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            Uniflow
-          </span>
+         
         </Link>
 
         {/* Desktop links */}

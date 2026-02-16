@@ -18,6 +18,5 @@ export { default as CTASection } from './landing/CTASection';
 export { default as EventCard } from './events/EventCard';
 
 // UI
-export { default as Logo } from './ui/Logo';
 export { default as ThemeToggle } from './ui/ThemeToggle';
 export { default as LocaleToggle } from './ui/LocaleToggle';

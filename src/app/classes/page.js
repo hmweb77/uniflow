@@ -165,7 +165,7 @@ function ClassesContent() {
         style={{ borderColor: 'var(--border-light)', height: '56px' }}
       >
         <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between">
-          <Link href="/classes" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <span className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
               Uniflow
             </span>
