@@ -189,10 +189,11 @@
     "termsNotice": "By registering, you agree to receive event-related emails."
   },
   "success": {
-    "title": "🎉 Payment Successful!",
+    "title": "Payment Successful",
     "message": "Thank you for your registration.",
     "emailNotice": "You will receive a confirmation email shortly with the event details and your access link.",
     "checkSpam": "Please check your inbox (and spam folder).",
+    "viewAllClasses": "View All Classes",
     "addToCalendar": "Add to Calendar",
     "home": "Back to Home",
     "google": "Google Calendar",

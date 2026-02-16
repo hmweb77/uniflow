@@ -20,6 +20,7 @@ export default function EventDetailPage() {
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [thankYouSending, setThankYouSending] = useState(false);
   const [ticketFilter, setTicketFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('date');
@@ -42,7 +43,7 @@ export default function EventDetailPage() {
       const attendeesQuery = query(
         attendeesRef,
         where('eventId', '==', eventId),
-        where('paymentStatus', '==', 'completed')
+        where('paymentStatus', 'in', ['completed', 'paid', 'free', 'promo_free'])
       );
       const attendeesSnap = await getDocs(attendeesQuery);
       const attendeesData = attendeesSnap.docs.map((doc) => ({
@@ -172,6 +173,26 @@ export default function EventDetailPage() {
     const xls = generateXLS(data, headers);
     const filename = `${event?.title?.replace(/\s+/g, '_')}_attendees.xls`;
     downloadXLS(xls, filename);
+  };
+
+  const handleSendThankYou = async () => {
+    if (!confirm('Send thank-you email to all attendees? This will mark the event as thank-you sent.')) return;
+    setThankYouSending(true);
+    try {
+      const res = await fetch('/api/email/thank-you', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      alert(`Sent ${data.sent} thank-you emails (${data.total} attendees).`);
+      setEvent((prev) => prev ? { ...prev, thankYouSent: true } : null);
+    } catch (err) {
+      alert('Failed: ' + err.message);
+    } finally {
+      setThankYouSending(false);
+    }
   };
 
   const handleSendEmail = async () => {
@@ -493,6 +514,13 @@ export default function EventDetailPage() {
                 className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50"
               >
                 📧 Send Email
+              </button>
+              <button
+                onClick={handleSendThankYou}
+                disabled={attendees.length === 0 || thankYouSending || event?.thankYouSent}
+                className="px-4 py-2 text-sm font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 disabled:opacity-50"
+              >
+                {thankYouSending ? 'Sending...' : event?.thankYouSent ? 'Thank-you sent' : '📬 Send thank-you email'}
               </button>
               <button
                 onClick={handleExportCSV}

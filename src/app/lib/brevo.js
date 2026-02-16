@@ -1,5 +1,6 @@
 // src/app/lib/brevo.js
 // Email service using Brevo (formerly Sendinblue)
+// Updated: Professional templates, no emojis, sober design
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 
@@ -8,14 +9,14 @@ const BREVO_API_URL = 'https://api.brevo.com/v3';
  */
 export async function sendEmail({ to, subject, htmlContent, textContent }) {
   const apiKey = process.env.BREVO_API_KEY;
-  
+
   if (!apiKey) {
     console.error('[BREVO] API key not configured');
     throw new Error('BREVO_API_KEY environment variable is not set');
   }
 
   const senderName = process.env.EMAIL_SENDER_NAME || 'Uniflow';
-  const senderEmail = process.env.EMAIL_SENDER_ADDRESS || 'noreply@uniflow.com';
+  const senderEmail = process.env.EMAIL_SENDER_ADDRESS || 'uniflow.escp@gmail.com';
 
   console.log('[BREVO] Sending email to:', to);
   console.log('[BREVO] Subject:', subject);
@@ -36,7 +37,7 @@ export async function sendEmail({ to, subject, htmlContent, textContent }) {
     const response = await fetch(`${BREVO_API_URL}/smtp/email`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
         'api-key': apiKey,
       },
@@ -45,7 +46,6 @@ export async function sendEmail({ to, subject, htmlContent, textContent }) {
 
     const responseText = await response.text();
     console.log('[BREVO] Response status:', response.status);
-    console.log('[BREVO] Response body:', responseText);
 
     if (!response.ok) {
       let errorData;
@@ -61,7 +61,6 @@ export async function sendEmail({ to, subject, htmlContent, textContent }) {
     const result = JSON.parse(responseText);
     console.log('[BREVO] Email sent successfully, messageId:', result.messageId);
     return result;
-
   } catch (err) {
     console.error('[BREVO] Send email error:', err);
     throw err;
@@ -80,16 +79,16 @@ export async function addContactToBrevo({
   meetingLink,
   eventId,
   ticketType,
+  campus,
   listId = 10,
 }) {
   const apiKey = process.env.BREVO_API_KEY;
-  
+
   if (!apiKey) {
     console.error('[BREVO] API key not configured for contacts');
     throw new Error('BREVO_API_KEY not set');
   }
 
-  // Format date for Brevo (YYYY-MM-DD)
   let formattedDate = '';
   if (eventDate) {
     const date = eventDate instanceof Date ? eventDate : new Date(eventDate);
@@ -106,18 +105,17 @@ export async function addContactToBrevo({
       MEETING_LINK: meetingLink || '',
       EVENT_ID: eventId || '',
       TICKET_TYPE: ticketType || '',
+      CAMPUS: campus || '',
     },
     listIds: [listId],
     updateEnabled: true,
   };
 
-  console.log('[BREVO] Adding contact:', email);
-
   try {
     const response = await fetch(`${BREVO_API_URL}/contacts`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
         'api-key': apiKey,
       },
@@ -125,7 +123,7 @@ export async function addContactToBrevo({
     });
 
     const responseText = await response.text();
-    
+
     if (!response.ok) {
       let errorData;
       try {
@@ -133,20 +131,18 @@ export async function addContactToBrevo({
       } catch {
         errorData = { message: responseText };
       }
-      
-      // Ignore duplicate contact errors
+
       if (errorData.code === 'duplicate_parameter') {
         console.log('[BREVO] Contact already exists, updated');
         return true;
       }
-      
+
       console.error('[BREVO] Contact API error:', errorData);
       throw new Error(errorData.message || 'Failed to add contact');
     }
 
     console.log('[BREVO] Contact added successfully');
     return true;
-
   } catch (err) {
     console.error('[BREVO] Add contact error:', err);
     throw err;
@@ -154,7 +150,7 @@ export async function addContactToBrevo({
 }
 
 /**
- * Email template for event confirmation
+ * Professional confirmation email template - sober, no emojis
  */
 export function getConfirmationEmailTemplate({
   customerName = 'Student',
@@ -174,8 +170,8 @@ export function getConfirmationEmailTemplate({
   const calendarOutlookUrl = `${appUrl}/api/calendar/redirect/${eventId}?provider=outlook`;
 
   const subject = isEnglish
-    ? `🎓 Your registration for ${eventTitle}`
-    : `🎓 Votre inscription pour ${eventTitle}`;
+    ? `Registration confirmed: ${eventTitle}`
+    : `Inscription confirmee: ${eventTitle}`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -185,107 +181,108 @@ export function getConfirmationEmailTemplate({
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${subject}</title>
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
-  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; border-radius: 16px 16px 0 0; text-align: center;">
-    <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">
-      ${isEnglish ? '🎉 Registration Confirmed!' : '🎉 Inscription confirmée !'}
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
+  
+  <!-- Header -->
+  <div style="background-color: #1a1a2e; padding: 32px 30px; text-align: center;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.3px;">
+      ${isEnglish ? 'Registration Confirmed' : 'Inscription Confirmee'}
     </h1>
   </div>
   
-  <div style="background: white; padding: 40px 30px; border-radius: 0 0 16px 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
-    <p style="font-size: 18px; margin-bottom: 24px;">
-      ${isEnglish ? `Hi <strong>${customerName}</strong>,` : `Bonjour <strong>${customerName}</strong>,`}
+  <!-- Body -->
+  <div style="background: #ffffff; padding: 36px 30px; border-bottom: 1px solid #e8e8ed;">
+    <p style="font-size: 16px; margin: 0 0 20px 0; color: #1a1a2e;">
+      ${isEnglish ? `Hello ${customerName},` : `Bonjour ${customerName},`}
     </p>
     
-    <p style="font-size: 16px; color: #4b5563;">
+    <p style="font-size: 15px; color: #48485c; margin: 0 0 24px 0;">
       ${isEnglish
-        ? `Thank you for registering! Your spot for <strong>${eventTitle}</strong> is confirmed.`
-        : `Merci pour votre inscription ! Votre place pour <strong>${eventTitle}</strong> est confirmée.`
+        ? `Your registration for <strong style="color: #1a1a2e;">${eventTitle}</strong> has been confirmed.`
+        : `Votre inscription pour <strong style="color: #1a1a2e;">${eventTitle}</strong> est confirmee.`
       }
     </p>
     
     ${ticketName && ticketName !== 'General Admission'
-      ? `<p style="font-size: 14px; color: #6b7280;">🎫 ${isEnglish ? 'Ticket' : 'Billet'}: <strong>${ticketName}</strong></p>`
+      ? `<p style="font-size: 14px; color: #48485c; margin: 0 0 24px 0;">Ticket: <strong>${ticketName}</strong></p>`
       : ''
     }
     
-    <div style="background: #f3f4f6; border-radius: 12px; padding: 24px; margin: 24px 0; border-left: 4px solid #667eea;">
-      <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #374151;">
-        ${isEnglish ? '📅 Event Details' : "📅 Détails de l'événement"}
+    <!-- Event Details Card -->
+    <div style="background: #f5f5f7; border-radius: 8px; padding: 24px; margin: 0 0 24px 0; border: 1px solid #e8e8ed;">
+      <h2 style="margin: 0 0 16px 0; font-size: 14px; font-weight: 600; color: #48485c; text-transform: uppercase; letter-spacing: 0.5px;">
+        ${isEnglish ? 'Event Details' : "Details de l'evenement"}
       </h2>
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
-          <td style="padding: 8px 0; color: #6b7280; width: 100px;">${isEnglish ? 'Event:' : 'Événement :'}</td>
-          <td style="padding: 8px 0; font-weight: 600; color: #111827;">${eventTitle}</td>
+          <td style="padding: 6px 0; color: #6e6e80; font-size: 14px; width: 80px; vertical-align: top;">${isEnglish ? 'Event' : 'Cours'}</td>
+          <td style="padding: 6px 0; font-weight: 600; color: #1a1a2e; font-size: 14px;">${eventTitle}</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; color: #6b7280;">${isEnglish ? 'Date:' : 'Date :'}</td>
-          <td style="padding: 8px 0; font-weight: 600; color: #111827;">${eventDate}</td>
+          <td style="padding: 6px 0; color: #6e6e80; font-size: 14px; vertical-align: top;">Date</td>
+          <td style="padding: 6px 0; font-weight: 600; color: #1a1a2e; font-size: 14px;">${eventDate}</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; color: #6b7280;">${isEnglish ? 'Time:' : 'Heure :'}</td>
-          <td style="padding: 8px 0; font-weight: 600; color: #111827;">${eventTime}</td>
+          <td style="padding: 6px 0; color: #6e6e80; font-size: 14px; vertical-align: top;">${isEnglish ? 'Time' : 'Heure'}</td>
+          <td style="padding: 6px 0; font-weight: 600; color: #1a1a2e; font-size: 14px;">${eventTime}</td>
         </tr>
       </table>
     </div>
     
+    <!-- Meeting Link -->
     ${meetingLink ? `
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-      <p style="color: rgba(255,255,255,0.9); margin: 0 0 16px 0; font-size: 16px;">
-        ${isEnglish ? '🔗 Your class access link:' : "🔗 Votre lien d'accès au cours :"}
+    <div style="text-align: center; margin: 0 0 24px 0;">
+      <p style="color: #48485c; margin: 0 0 12px 0; font-size: 14px;">
+        ${isEnglish ? 'Your class access link:' : "Votre lien d'acces au cours :"}
       </p>
-      <a href="${meetingLink}" style="display: inline-block; background: white; color: #667eea; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        ${isEnglish ? 'Join Class →' : 'Rejoindre le cours →'}
+      <a href="${meetingLink}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+        ${isEnglish ? 'Join Class' : 'Rejoindre le cours'}
       </a>
-      <p style="color: rgba(255,255,255,0.7); margin: 16px 0 0 0; font-size: 12px;">
-        ${isEnglish ? "Save this link - you'll need it to join!" : 'Conservez ce lien - vous en aurez besoin !'}
+      <p style="color: #6e6e80; margin: 12px 0 0 0; font-size: 12px;">
+        ${isEnglish ? "Save this link. You will need it to join." : 'Conservez ce lien, vous en aurez besoin.'}
       </p>
     </div>
     ` : `
-    <div style="background: #fef3c7; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #fcd34d;">
-      <p style="color: #92400e; margin: 0; font-size: 14px;">
-        ⚠️ ${isEnglish
+    <div style="background: #fff8e6; border-radius: 6px; padding: 16px; margin: 0 0 24px 0; border: 1px solid #f0e0b0;">
+      <p style="color: #7a6520; margin: 0; font-size: 14px;">
+        ${isEnglish
           ? 'The class link will be sent separately before the event.'
-          : "Le lien du cours sera envoyé séparément avant l'événement."
+          : "Le lien du cours sera envoye separement avant l'evenement."
         }
       </p>
     </div>
     `}
     
-    <!-- Calendar Section -->
-    <div style="background: #f0fdf4; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #bbf7d0;">
-      <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #166534;">
-        📅 ${isEnglish ? "Don't forget! Add to your calendar:" : 'Ne manquez pas ! Ajoutez à votre calendrier :'}
-      </h3>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <a href="${calendarGoogleUrl}" style="display: inline-block; background: white; color: #4285f4; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; border: 1px solid #e5e7eb;">
-          📆 Google
-        </a>
-        <a href="${calendarOutlookUrl}" style="display: inline-block; background: white; color: #0078d4; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; border: 1px solid #e5e7eb;">
-          📧 Outlook
-        </a>
-        <a href="${calendarIcsUrl}" style="display: inline-block; background: white; color: #374151; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; border: 1px solid #e5e7eb;">
-          ⬇️ ${isEnglish ? 'Download .ics' : 'Télécharger .ics'}
-        </a>
+    <!-- Calendar Links -->
+    <div style="background: #f0f7f0; border-radius: 6px; padding: 16px; margin: 0 0 24px 0; border: 1px solid #d4e8d4;">
+      <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #2d5a2d;">
+        ${isEnglish ? 'Add to your calendar' : 'Ajouter a votre calendrier'}
+      </p>
+      <div>
+        <a href="${calendarGoogleUrl}" style="display: inline-block; background: #ffffff; color: #1a1a2e; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 13px; border: 1px solid #d4e8d4; margin-right: 6px; margin-bottom: 6px;">Google</a>
+        <a href="${calendarOutlookUrl}" style="display: inline-block; background: #ffffff; color: #1a1a2e; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 13px; border: 1px solid #d4e8d4; margin-right: 6px; margin-bottom: 6px;">Outlook</a>
+        <a href="${calendarIcsUrl}" style="display: inline-block; background: #ffffff; color: #1a1a2e; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 13px; border: 1px solid #d4e8d4; margin-bottom: 6px;">${isEnglish ? 'Download .ics' : 'Telecharger .ics'}</a>
       </div>
     </div>
-    
-    <div style="border-top: 1px solid #e5e7eb; margin-top: 32px; padding-top: 24px;">
-      <p style="color: #6b7280; font-size: 14px; margin: 0;">
+
+    <!-- Spam Notice -->
+    <div style="background: #f5f5f7; border-radius: 6px; padding: 14px; margin: 0 0 8px 0; text-align: center;">
+      <p style="color: #6e6e80; font-size: 13px; margin: 0;">
         ${isEnglish
-          ? "💡 <strong>Tip:</strong> Add this event to your calendar so you don't miss it!"
-          : '💡 <strong>Conseil :</strong> Ajoutez cet événement à votre calendrier !'
+          ? 'Did not receive this email? Please check your spam or junk folder.'
+          : "Vous n'avez pas recu cet email ? Verifiez votre dossier spam ou courrier indesirable."
         }
       </p>
     </div>
   </div>
   
-  <div style="text-align: center; padding: 24px; color: #9ca3af; font-size: 12px;">
-    <p style="margin: 0 0 8px 0;">Uniflow - ${isEnglish ? 'Learn without limits' : 'Apprenez sans limites'}</p>
+  <!-- Footer -->
+  <div style="text-align: center; padding: 24px; color: #6e6e80; font-size: 12px;">
+    <p style="margin: 0 0 4px 0;">Uniflow</p>
     <p style="margin: 0;">
       ${isEnglish
         ? 'You received this email because you registered for an event.'
-        : "Vous avez reçu cet email car vous vous êtes inscrit à un événement."
+        : "Vous avez recu cet email suite a votre inscription a un evenement."
       }
     </p>
   </div>
@@ -294,14 +291,90 @@ export function getConfirmationEmailTemplate({
   `;
 
   const textContent = isEnglish
-    ? `Registration Confirmed!\n\nHi ${customerName},\n\nThank you for registering for ${eventTitle}.\n${ticketName ? `Ticket: ${ticketName}\n` : ''}\nEvent Details:\nDate: ${eventDate}\nTime: ${eventTime}\n\n${meetingLink ? `Access your online class: ${meetingLink}` : 'The class link will be sent before the event.'}\n\nAdd to your calendar:\nGoogle: ${calendarGoogleUrl}\nDownload .ics: ${calendarIcsUrl}\n\nSee you there!\nUniflow`
-    : `Inscription confirmée !\n\nBonjour ${customerName},\n\nMerci de vous être inscrit(e) pour ${eventTitle}.\n${ticketName ? `Billet: ${ticketName}\n` : ''}\nDétails de l'événement:\nDate: ${eventDate}\nHeure: ${eventTime}\n\n${meetingLink ? `Accédez à votre cours: ${meetingLink}` : "Le lien du cours sera envoyé avant l'événement."}\n\nAjoutez à votre calendrier:\nGoogle: ${calendarGoogleUrl}\nTélécharger .ics: ${calendarIcsUrl}\n\nÀ bientôt !\nUniflow`;
+    ? `Registration Confirmed\n\nHello ${customerName},\n\nYour registration for ${eventTitle} has been confirmed.\n${ticketName ? `Ticket: ${ticketName}\n` : ''}\nEvent Details:\nDate: ${eventDate}\nTime: ${eventTime}\n\n${meetingLink ? `Access your class: ${meetingLink}` : 'The class link will be sent before the event.'}\n\nAdd to calendar:\nGoogle: ${calendarGoogleUrl}\nDownload .ics: ${calendarIcsUrl}\n\nDid not receive this email? Check your spam folder.\n\nUniflow`
+    : `Inscription Confirmee\n\nBonjour ${customerName},\n\nVotre inscription pour ${eventTitle} est confirmee.\n${ticketName ? `Billet: ${ticketName}\n` : ''}\nDetails:\nDate: ${eventDate}\nHeure: ${eventTime}\n\n${meetingLink ? `Acces au cours: ${meetingLink}` : "Le lien sera envoye avant l'evenement."}\n\nAjouter au calendrier:\nGoogle: ${calendarGoogleUrl}\nTelecharger .ics: ${calendarIcsUrl}\n\nVous n'avez pas recu cet email ? Verifiez votre dossier spam.\n\nUniflow`;
 
   return { subject, htmlContent, textContent };
 }
 
 /**
- * Email template for 24-hour reminder
+ * Thank-you / post-event email template
+ */
+export function getThankYouEmailTemplate({
+  customerName = 'Student',
+  eventTitle,
+  feedbackFormUrl,
+  locale = 'en',
+}) {
+  const isEnglish = locale === 'en';
+
+  const subject = isEnglish
+    ? `Thank you for attending: ${eventTitle}`
+    : `Merci d'avoir participe : ${eventTitle}`;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
+  
+  <div style="background-color: #1a1a2e; padding: 32px 30px; text-align: center;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">
+      ${isEnglish ? 'Thank You for Attending' : 'Merci pour votre participation'}
+    </h1>
+  </div>
+  
+  <div style="background: #ffffff; padding: 36px 30px;">
+    <p style="font-size: 16px; margin: 0 0 20px 0;">
+      ${isEnglish ? `Hello ${customerName},` : `Bonjour ${customerName},`}
+    </p>
+    
+    <p style="font-size: 15px; color: #48485c; margin: 0 0 24px 0;">
+      ${isEnglish
+        ? `Thank you for attending <strong>${eventTitle}</strong>. We hope you found the session valuable.`
+        : `Merci d'avoir participe a <strong>${eventTitle}</strong>. Nous esperons que la session vous a ete utile.`
+      }
+    </p>
+    
+    ${feedbackFormUrl ? `
+    <div style="background: #f5f5f7; border-radius: 8px; padding: 24px; margin: 0 0 24px 0; text-align: center; border: 1px solid #e8e8ed;">
+      <p style="margin: 0 0 16px 0; font-size: 15px; color: #1a1a2e; font-weight: 600;">
+        ${isEnglish ? 'Your feedback matters' : 'Votre avis compte'}
+      </p>
+      <p style="margin: 0 0 16px 0; font-size: 14px; color: #48485c;">
+        ${isEnglish
+          ? 'Help us improve by sharing your experience.'
+          : 'Aidez-nous a nous ameliorer en partageant votre experience.'
+        }
+      </p>
+      <a href="${feedbackFormUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+        ${isEnglish ? 'Share Feedback' : 'Donner mon avis'}
+      </a>
+    </div>
+    ` : ''}
+    
+    <p style="font-size: 14px; color: #6e6e80;">
+      ${isEnglish ? 'Best regards,' : 'Cordialement,'}
+      <br>
+      ${isEnglish ? 'The Uniflow Team' : "L'equipe Uniflow"}
+    </p>
+  </div>
+  
+  <div style="text-align: center; padding: 24px; color: #6e6e80; font-size: 12px;">
+    <p style="margin: 0;">Uniflow</p>
+  </div>
+</body>
+</html>
+  `;
+
+  return { subject, htmlContent };
+}
+
+/**
+ * 24-hour reminder template - professional, no emojis
  */
 export function get24HourReminderTemplate({
   customerName = 'Student',
@@ -314,8 +387,8 @@ export function get24HourReminderTemplate({
   const isEnglish = locale === 'en';
 
   const subject = isEnglish
-    ? `⏰ Reminder: ${eventTitle} is tomorrow!`
-    : `⏰ Rappel: ${eventTitle} c'est demain !`;
+    ? `Reminder: ${eventTitle} is tomorrow`
+    : `Rappel : ${eventTitle} c'est demain`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -324,49 +397,50 @@ export function get24HourReminderTemplate({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
-  <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 40px 30px; border-radius: 16px 16px 0 0; text-align: center;">
-    <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">
-      ${isEnglish ? '⏰ 24 Hours to Go!' : '⏰ Plus que 24 heures !'}
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
+  
+  <div style="background-color: #1a1a2e; padding: 32px 30px; text-align: center;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">
+      ${isEnglish ? 'Event Reminder' : 'Rappel'}
     </h1>
   </div>
   
-  <div style="background: white; padding: 40px 30px; border-radius: 0 0 16px 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
-    <p style="font-size: 18px; margin-bottom: 24px;">
-      ${isEnglish ? `Hi ${customerName},` : `Bonjour ${customerName},`}
+  <div style="background: #ffffff; padding: 36px 30px;">
+    <p style="font-size: 16px; margin: 0 0 20px 0;">
+      ${isEnglish ? `Hello ${customerName},` : `Bonjour ${customerName},`}
     </p>
     
-    <p style="font-size: 16px; color: #4b5563;">
+    <p style="font-size: 15px; color: #48485c; margin: 0 0 24px 0;">
       ${isEnglish
-        ? `Just a friendly reminder that <strong>${eventTitle}</strong> is happening tomorrow!`
-        : `Petit rappel : <strong>${eventTitle}</strong> c'est demain !`
+        ? `This is a reminder that <strong>${eventTitle}</strong> is taking place tomorrow.`
+        : `Rappel : <strong>${eventTitle}</strong> a lieu demain.`
       }
     </p>
     
-    <div style="background: #fef3c7; border-radius: 12px; padding: 24px; margin: 24px 0; border-left: 4px solid #f59e0b;">
-      <p style="margin: 0; font-size: 16px; color: #92400e;">
-        📅 <strong>${eventDate}</strong> ${isEnglish ? 'at' : 'à'} <strong>${eventTime}</strong>
+    <div style="background: #f5f5f7; border-radius: 8px; padding: 20px; margin: 0 0 24px 0; border: 1px solid #e8e8ed;">
+      <p style="margin: 0; font-size: 15px; color: #1a1a2e; font-weight: 600;">
+        ${eventDate} ${isEnglish ? 'at' : 'a'} ${eventTime}
       </p>
     </div>
     
     ${meetingLink ? `
-    <div style="text-align: center; margin: 24px 0;">
-      <a href="${meetingLink}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px;">
-        ${isEnglish ? '🔗 Save Your Class Link' : '🔗 Gardez votre lien'}
+    <div style="text-align: center; margin: 0 0 24px 0;">
+      <a href="${meetingLink}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+        ${isEnglish ? 'Save Your Class Link' : 'Gardez votre lien'}
       </a>
     </div>
     ` : ''}
     
-    <p style="color: #6b7280; font-size: 14px;">
+    <p style="font-size: 14px; color: #6e6e80;">
       ${isEnglish
-        ? "Make sure to be ready a few minutes before the class starts!"
-        : "Assurez-vous d'être prêt quelques minutes avant le début du cours !"
+        ? 'Make sure to be ready a few minutes before the class starts.'
+        : "Assurez-vous d'etre pret quelques minutes avant le debut du cours."
       }
     </p>
   </div>
   
-  <div style="text-align: center; padding: 24px; color: #9ca3af; font-size: 12px;">
-    <p style="margin: 0;">Uniflow - ${isEnglish ? 'Learn without limits' : 'Apprenez sans limites'}</p>
+  <div style="text-align: center; padding: 24px; color: #6e6e80; font-size: 12px;">
+    <p style="margin: 0;">Uniflow</p>
   </div>
 </body>
 </html>

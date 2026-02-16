@@ -9,6 +9,8 @@ import { db } from '../../lib/firebase';
 import { useLocale } from '@/contexts/LocaleContext';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import LocaleToggle from '@/components/ui/LocaleToggle';
+import RegistrationForm from '@/components/RegistrationForm';
+import { cleanDashes } from '@/utils/textCleanup';
 
 export default function PublicEventPage() {
   const params = useParams();
@@ -21,14 +23,6 @@ export default function PublicEventPage() {
   const [showRegistration, setShowRegistration] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    surname: '',
-    email: '',
-    emailPrefix: '',
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [emailError, setEmailError] = useState('');
 
   useEffect(() => {
     if (slug) fetchEvent();
@@ -71,82 +65,6 @@ export default function PublicEventPage() {
       setError('Failed to load event');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setEmailError('');
-  };
-
-  const validateEmail = () => {
-    const emailDomain = event?.emailDomain?.trim();
-    if (emailDomain) {
-      if (!formData.emailPrefix || formData.emailPrefix.length < 2) {
-        setEmailError(t.eventDetail?.enterEmailPrefix || 'Please enter your email prefix');
-        return null;
-      }
-      return `${formData.emailPrefix}@${emailDomain}`;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setEmailError(t.eventDetail?.invalidEmail || 'Please enter a valid email address');
-      return null;
-    }
-    return formData.email;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    // Double-check: block submission for past events
-    if (isPastEvent) {
-      setError(locale === 'fr' ? 'Cet événement est terminé.' : 'This event has ended.');
-      return;
-    }
-
-    if (!selectedTicket) {
-      setError(t.eventDetail?.selectTicketError || 'Please select a ticket');
-      return;
-    }
-    const validatedEmail = validateEmail();
-    if (!validatedEmail) return;
-
-    setSubmitting(true);
-    setError('');
-    try {
-      const response = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: event.id,
-          eventTitle: event.title,
-          price: selectedTicket.price,
-          ticketId: selectedTicket.id,
-          ticketName: selectedTicket.name,
-          customerName: formData.name,
-          customerSurname: formData.surname,
-          customerEmail: validatedEmail,
-          locale,
-        }),
-      });
-      const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error(data.error || 'Failed to create checkout session');
-      }
-    } catch (err) {
-      console.error('Checkout error:', err);
-      // Show the specific server error if available (e.g. "already registered", "event ended")
-      const msg =
-        err.message && err.message !== 'Failed to create checkout session'
-          ? err.message
-          : t.eventDetail?.paymentFailed || 'Failed to proceed to payment. Please try again.';
-      setError(msg);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -247,13 +165,12 @@ export default function PublicEventPage() {
   if (!event) return null;
 
   const tickets = event.tickets || [];
-  const hasEmailRestriction = event.emailDomain && event.emailDomain.trim().length > 0;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+    <div className="event-detail-page min-h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       {/* ─── Top bar ───────────────────────────────────────── */}
       <div
-        className="sticky top-0 z-50 glass border-b"
+        className="event-detail-topbar sticky top-0 z-50 glass border-b"
         style={{ borderColor: 'var(--border-light)' }}
       >
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -269,7 +186,7 @@ export default function PublicEventPage() {
         {/* ─── Past event banner ─────────────────────────── */}
         {isPastEvent && (
           <div
-            className="rounded-xl p-4 mb-6 flex items-center gap-3"
+            className="event-card rounded-xl p-4 mb-6 flex items-center gap-3"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               border: '1px solid var(--border-default)',
@@ -294,7 +211,7 @@ export default function PublicEventPage() {
 
         {/* ─── Banner ────────────────────────────────────── */}
         <div
-          className="rounded-2xl overflow-hidden mb-6 shadow-sm relative"
+          className="event-card rounded-2xl overflow-hidden mb-6 shadow-sm relative"
           style={{ backgroundColor: 'var(--bg-inverse)' }}
         >
           {event.bannerUrl ? (
@@ -347,17 +264,17 @@ export default function PublicEventPage() {
           )}
 
           <h1
-            className="text-2xl md:text-3xl font-bold leading-tight mb-2"
+            className="event-page-title text-2xl md:text-3xl font-bold leading-tight mb-2"
             style={{ color: 'var(--text-primary)' }}
           >
-            {event.title}
+            {cleanDashes(event.title)}
           </h1>
 
           {event.organizer && (
             <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
               {t.eventDetail?.by || 'By'}{' '}
               <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-                {event.organizer}
+                {cleanDashes(event.organizer)}
               </span>
             </p>
           )}
@@ -408,14 +325,14 @@ export default function PublicEventPage() {
             {/* Description */}
             {event.description && (
               <div
-                className="rounded-xl p-5 border"
+                className="event-card rounded-xl p-5 border"
                 style={{
                   backgroundColor: 'var(--bg-primary)',
                   borderColor: 'var(--border-light)',
                 }}
               >
                 <h2
-                  className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  className="event-section-label text-xs font-semibold uppercase tracking-wider mb-3"
                   style={{ color: 'var(--text-tertiary)' }}
                 >
                   {t.eventDetail?.about || 'About'}
@@ -424,7 +341,7 @@ export default function PublicEventPage() {
                   className="text-[15px] leading-relaxed whitespace-pre-wrap"
                   style={{ color: 'var(--text-secondary)' }}
                 >
-                  {event.description}
+                  {cleanDashes(event.description)}
                 </p>
               </div>
             )}
@@ -432,14 +349,14 @@ export default function PublicEventPage() {
             {/* Who is this for */}
             {event.whoThisIsFor && (
               <div
-                className="rounded-xl p-5 border"
+                className="event-card event-card-who rounded-xl p-5 border"
                 style={{
                   backgroundColor: 'var(--color-primary-50)',
                   borderColor: 'var(--color-primary-100)',
                 }}
               >
                 <h2
-                  className="text-xs font-semibold uppercase tracking-wider mb-2"
+                  className="event-section-label text-xs font-semibold uppercase tracking-wider mb-2"
                   style={{ color: 'var(--color-primary-400)' }}
                 >
                   {t.eventDetail?.whoIsThisFor || 'Who is this for?'}
@@ -457,7 +374,7 @@ export default function PublicEventPage() {
           {/* Right: ticket selection — sticky on desktop */}
           <div className="md:w-[340px] md:sticky md:top-[72px]">
             <div
-              className="rounded-xl border overflow-hidden"
+              className="event-card event-ticket-card rounded-xl border overflow-hidden"
               style={{
                 backgroundColor: 'var(--bg-primary)',
                 borderColor: 'var(--border-light)',
@@ -470,7 +387,7 @@ export default function PublicEventPage() {
                 style={{ borderColor: 'var(--border-light)' }}
               >
                 <h2
-                  className="text-sm font-semibold"
+                  className="event-section-label text-sm font-semibold"
                   style={{ color: isPastEvent ? 'var(--text-tertiary)' : 'var(--text-primary)' }}
                 >
                   {isPastEvent
@@ -491,7 +408,9 @@ export default function PublicEventPage() {
                         setSelectedTicket(ticket);
                         setShowRegistration(true);
                       }}
-                      className={`relative p-4 rounded-lg border-2 transition-all duration-150 ${
+                      className={`ticket-option relative p-4 rounded-lg border-2 transition-all duration-150 ${
+                        isSelected ? 'ticket-option-selected' : ''
+                      } ${
                         isPastEvent
                           ? 'opacity-50 cursor-default'
                           : 'cursor-pointer'
@@ -512,7 +431,7 @@ export default function PublicEventPage() {
                       {/* Selection indicator — hidden for past events */}
                       {!isPastEvent && (
                         <div
-                          className="absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all"
+                          className={`ticket-option-indicator absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'ticket-option-indicator-selected' : ''}`}
                           style={{
                             borderColor: isSelected
                               ? 'var(--text-primary)'
@@ -524,7 +443,7 @@ export default function PublicEventPage() {
                         >
                           {isSelected && (
                             <svg
-                              className="w-3 h-3"
+                              className="w-3 h-3 ticket-option-check"
                               style={{ color: 'var(--bg-primary)' }}
                               fill="none"
                               viewBox="0 0 24 24"
@@ -625,139 +544,17 @@ export default function PublicEventPage() {
 
               {/* ─── Registration Form (only for upcoming events) ── */}
               {!isPastEvent && showRegistration && selectedTicket && (
-                <form
-                  onSubmit={handleSubmit}
-                  className="border-t p-5 space-y-3.5"
-                  style={{ borderColor: 'var(--border-light)' }}
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label
-                        className="block text-xs font-medium mb-1.5"
-                        style={{ color: 'var(--text-secondary)' }}
-                      >
-                        {t.registration?.name || 'First Name'}
-                      </label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        required
-                        className="input py-2.5 text-sm"
-                        placeholder={t.registration?.namePlaceholder || 'Enter your first name'}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        className="block text-xs font-medium mb-1.5"
-                        style={{ color: 'var(--text-secondary)' }}
-                      >
-                        {t.registration?.surname || 'Last Name'}
-                      </label>
-                      <input
-                        type="text"
-                        name="surname"
-                        value={formData.surname}
-                        onChange={handleInputChange}
-                        required
-                        className="input py-2.5 text-sm"
-                        placeholder={t.registration?.surnamePlaceholder || 'Enter your last name'}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      className="block text-xs font-medium mb-1.5"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      {t.registration?.email || 'Email'}
-                    </label>
-
-                    {hasEmailRestriction ? (
-                      <div className="flex">
-                        <input
-                          type="text"
-                          name="emailPrefix"
-                          value={formData.emailPrefix}
-                          onChange={handleInputChange}
-                          required
-                          className="input py-2.5 text-sm rounded-r-none"
-                          style={{
-                            borderColor: emailError
-                              ? 'var(--color-error)'
-                              : undefined,
-                          }}
-                          placeholder={t.registration?.emailPrefixPlaceholder || 'firstname.lastname'}
-                        />
-                        <span
-                          className="px-3 py-2.5 border border-l-0 rounded-r-lg text-xs flex items-center whitespace-nowrap"
-                          style={{
-                            backgroundColor: 'var(--bg-tertiary)',
-                            borderColor: 'var(--border-default)',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          @{event.emailDomain}
-                        </span>
-                      </div>
-                    ) : (
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        required
-                        className="input py-2.5 text-sm"
-                        style={{
-                          borderColor: emailError
-                            ? 'var(--color-error)'
-                            : undefined,
-                        }}
-                        placeholder={t.registration?.emailPlaceholder || 'Enter your email'}
-                      />
-                    )}
-
-                    {emailError && (
-                      <p
-                        className="text-xs mt-1"
-                        style={{ color: 'var(--color-error)' }}
-                      >
-                        {emailError}
-                      </p>
-                    )}
-
-                    {hasEmailRestriction && (
-                      <p
-                        className="text-[11px] mt-1"
-                        style={{ color: 'var(--text-tertiary)' }}
-                      >
-                        {(t.eventDetail?.emailRestriction || 'Only @{domain} addresses accepted').replace(
-                          '{domain}',
-                          event.emailDomain
-                        )}
-                      </p>
-                    )}
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="btn btn-primary btn-lg w-full"
-                  >
-                    {submitting
-                      ? (t.common?.loading || 'Loading...')
-                      : `${t.eventDetail?.pay || 'Pay'} ${selectedTicket.price} €`}
-                  </button>
-
-                  <p
-                    className="text-[11px] text-center leading-relaxed"
-                    style={{ color: 'var(--text-tertiary)' }}
-                  >
-                    {t.registration?.termsNotice || 'By registering, you agree to receive event-related emails.'}
-                  </p>
-                </form>
+                <div className="event-registration-form border-t p-5" style={{ borderColor: 'var(--border-light)' }}>
+                <RegistrationForm
+                  event={event}
+                  selectedTicket={selectedTicket}
+                  locale={locale}
+                  t={t}
+                  isPastEvent={isPastEvent}
+                  onSuccess={(url) => { window.location.href = url; }}
+                  onError={setError}
+                />
+                </div>
               )}
 
               {/* Not yet selected — prompt (only for upcoming events) */}

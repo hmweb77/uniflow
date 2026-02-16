@@ -189,10 +189,11 @@
     "termsNotice": "En vous inscrivant, vous acceptez de recevoir des emails liés à l'événement."
   },
   "success": {
-    "title": "🎉 Paiement réussi !",
+    "title": "Paiement réussi",
     "message": "Merci pour votre inscription.",
     "emailNotice": "Vous recevrez un email de confirmation avec les détails de l'événement et votre lien d'accès.",
     "checkSpam": "Veuillez vérifier votre boîte de réception (et les spams).",
+    "viewAllClasses": "Voir tous les cours",
     "addToCalendar": "Ajouter au calendrier",
     "home": "Retour à l'accueil",
     "google": "Google Calendar",

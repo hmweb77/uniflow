@@ -1,10 +1,13 @@
 // src/app/api/checkout/route.js
-// SECURITY: Price is verified from database, NOT from client request
-// SUPPORTS: Paid events (Stripe) + Free events (direct registration)
+// Checkout API - handles paid (Stripe) and free registrations
+// Updated: promo codes, campus field, custom fields support
 
 import { NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import { adminDb } from '../../lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 export async function POST(request) {
   try {
@@ -12,374 +15,237 @@ export async function POST(request) {
     const {
       eventId,
       ticketId,
-      customerName,
-      customerSurname,
-      customerEmail,
+      firstName,
+      lastName,
+      email,
       locale = 'en',
+      promoCode,
+      campus,
+      customFieldValues,
     } = body;
 
-    // ============================================
-    // VALIDATION
-    // ============================================
-
-    if (!eventId || !customerEmail) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+    if (!eventId || !email || !firstName || !lastName) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(customerEmail)) {
-      return NextResponse.json(
-        { error: 'Invalid email format' },
-        { status: 400 }
-      );
-    }
-
-    // ============================================
-    // GET EVENT & PRICE FROM DATABASE (CRITICAL!)
-    // Never trust client-provided price
-    // ============================================
-
+    // Get event
     const eventDoc = await adminDb.collection('events').doc(eventId).get();
-
     if (!eventDoc.exists) {
-      return NextResponse.json(
-        { error: 'Event not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
+    const event = eventDoc.data();
 
-    const eventData = eventDoc.data();
-
-    // Check if event is still active
-    if (eventData.status === 'cancelled') {
-      return NextResponse.json(
-        { error: 'This event has been cancelled' },
-        { status: 400 }
-      );
-    }
-
-    // ============================================
-    // CHECK IF EVENT DATE HAS PASSED (CRITICAL!)
-    // ============================================
-
-    if (!eventData.date) {
-      return NextResponse.json(
-        { error: 'Event date is not configured' },
-        { status: 500 }
-      );
-    }
-
-    let eventDate;
-    if (eventData.date?.toDate) {
-      eventDate = eventData.date.toDate();
-    } else if (eventData.date?._seconds) {
-      eventDate = new Date(eventData.date._seconds * 1000);
-    } else {
-      eventDate = new Date(eventData.date);
-    }
-
-    if (isNaN(eventDate.getTime())) {
-      return NextResponse.json(
-        { error: 'Event has an invalid date configuration' },
-        { status: 500 }
-      );
-    }
-
-    if (eventDate < new Date()) {
-      return NextResponse.json(
-        { error: 'This event has already ended. Registration is closed.' },
-        { status: 400 }
-      );
-    }
-
-    // ============================================
-    // GET SERVER-SIDE PRICE FROM TICKET
-    // ============================================
-
-    let price;
-    let resolvedTicketId = ticketId || 'default';
-    let resolvedTicketName = 'General Admission';
-
-    if (eventData.tickets && eventData.tickets.length > 0) {
-      const ticket = ticketId
-        ? eventData.tickets.find(t => t.id === ticketId)
-        : eventData.tickets[0];
-
-      if (!ticket) {
+    // Check email domain restriction
+    if (event.emailDomain) {
+      const allowedDomains = event.emailDomain.split(',').map((d) => d.trim().toLowerCase());
+      const emailDomain = email.split('@')[1]?.toLowerCase();
+      if (!allowedDomains.includes(emailDomain)) {
         return NextResponse.json(
-          { error: 'Ticket type not found' },
-          { status: 404 }
-        );
-      }
-
-      price = ticket.price;
-      resolvedTicketId = ticket.id;
-      resolvedTicketName = ticket.name;
-    } else {
-      // Legacy: single price field
-      price = eventData.price;
-    }
-
-    // Validate price — allows 0 for free events
-    if (typeof price !== 'number' || !isFinite(price) || price < 0) {
-      return NextResponse.json(
-        { error: 'Invalid ticket price configuration' },
-        { status: 500 }
-      );
-    }
-
-    // ============================================
-    // CHECK EMAIL DOMAIN RESTRICTION
-    // ============================================
-
-    if (eventData.emailDomain && eventData.emailDomain.trim()) {
-      const requiredDomain = eventData.emailDomain.trim().toLowerCase();
-      const emailDomain = customerEmail.split('@')[1]?.toLowerCase();
-
-      if (emailDomain !== requiredDomain) {
-        return NextResponse.json(
-          { error: `Only @${requiredDomain} emails are allowed for this event` },
+          { error: `Registration is restricted to ${event.emailDomain} email addresses` },
           { status: 400 }
         );
       }
     }
 
-    // ============================================
-    // PREVENT DUPLICATE REGISTRATIONS
-    // ============================================
-
-    const normalizedEmail = customerEmail.toLowerCase().trim();
-
-    const existingAttendee = await adminDb
+    // Duplicate check
+    const existingAttendees = await adminDb
       .collection('attendees')
       .where('eventId', '==', eventId)
-      .where('email', '==', normalizedEmail)
-      .where('paymentStatus', '==', 'completed')
-      .limit(1)
+      .where('email', '==', email.toLowerCase())
       .get();
 
-    if (!existingAttendee.empty) {
-      return NextResponse.json(
-        { error: 'You are already registered for this event' },
-        { status: 400 }
-      );
+    if (!existingAttendees.empty) {
+      return NextResponse.json({ error: 'You are already registered for this event' }, { status: 400 });
     }
 
-    // Sanitize inputs
-    const sanitize = (str) => str ? String(str).slice(0, 200).replace(/[<>]/g, '') : '';
+    // Resolve ticket and price SERVER-SIDE
+    let ticketName = 'General Admission';
+    let unitPrice = event.price || 0;
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-    if (!appUrl) {
-      console.error('NEXT_PUBLIC_APP_URL is not configured');
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      );
+    if (event.tickets && event.tickets.length > 0) {
+      const selectedTicket = ticketId
+        ? event.tickets.find((t) => t.id === ticketId)
+        : event.tickets[0];
+      if (selectedTicket) {
+        ticketName = selectedTicket.name;
+        unitPrice = selectedTicket.price || 0;
+      }
     }
 
-    // ============================================
-    // FREE EVENT → Register directly (skip Stripe)
-    // ============================================
+    // Apply promo code
+    let discountAmount = 0;
+    let appliedPromo = null;
 
-    if (price === 0) {
-      const now = new Date();
+    if (promoCode) {
+      const promosRef = adminDb.collection('promos');
+      const promoSnap = await promosRef.where('code', '==', promoCode.toUpperCase()).limit(1).get();
 
-      // Save attendee
+      if (!promoSnap.empty) {
+        const promoDoc = promoSnap.docs[0];
+        const promo = promoDoc.data();
+
+        // Validate promo
+        const isValid =
+          promo.active !== false &&
+          (!promo.expiresAt || (promo.expiresAt.toDate ? promo.expiresAt.toDate() : new Date(promo.expiresAt)) > new Date()) &&
+          (!promo.maxUses || (promo.usedCount || 0) < promo.maxUses) &&
+          (!promo.eventId || promo.eventId === eventId);
+
+        if (isValid) {
+          if (promo.discountType === 'percentage') {
+            discountAmount = Math.round(unitPrice * (promo.discountValue / 100) * 100) / 100;
+          } else {
+            discountAmount = Math.min(promo.discountValue, unitPrice);
+          }
+          appliedPromo = { id: promoDoc.id, code: promo.code, discountAmount };
+
+          // Increment used count
+          await promoDoc.ref.update({ usedCount: FieldValue.increment(1) });
+        }
+      }
+    }
+
+    const finalPrice = Math.max(0, unitPrice - discountAmount);
+
+    // Base metadata
+    const metadata = {
+      eventId,
+      eventTitle: event.title,
+      firstName,
+      lastName,
+      email: email.toLowerCase(),
+      ticketId: ticketId || '',
+      ticketName,
+      locale,
+      campus: campus || '',
+      promoCode: appliedPromo?.code || '',
+      discountAmount: discountAmount.toString(),
+    };
+
+    // Store custom field values in metadata
+    if (customFieldValues && typeof customFieldValues === 'object') {
+      Object.entries(customFieldValues).forEach(([key, value]) => {
+        if (typeof value === 'string' && value.trim()) {
+          metadata[`custom_${key}`] = value.trim().substring(0, 500);
+        }
+      });
+    }
+
+    // FREE event path
+    if (finalPrice === 0) {
       const attendeeData = {
         eventId,
-        eventTitle: eventData.title,
-        name: sanitize(customerName) || '',
-        surname: sanitize(customerSurname) || '',
-        email: normalizedEmail,
-        paymentStatus: 'completed',
-        stripeSessionId: `free_${eventId}_${Date.now()}`,
-        stripePaymentIntent: null,
-        amountPaid: 0,
-        currency: 'eur',
-        ticketId: resolvedTicketId,
-        ticketName: resolvedTicketName,
-        ticketIncludes: eventData.tickets?.find(t => t.id === resolvedTicketId)?.includes || [],
-        createdAt: now,
-        processedAt: now,
-        isFreeRegistration: true,
+        eventTitle: event.title,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.toLowerCase(),
+        ticketId: ticketId || null,
+        ticketName,
+        amount: 0,
+        originalPrice: unitPrice,
+        discountAmount,
+        promoCode: appliedPromo?.code || null,
+        campus: campus || null,
+        customFields: customFieldValues || {},
+        status: 'confirmed',
+        paymentStatus: finalPrice === 0 && unitPrice === 0 ? 'free' : 'promo_free',
+        createdAt: FieldValue.serverTimestamp(),
       };
 
-      const attendeeRef = await adminDb.collection('attendees').add(attendeeData);
-      console.log('✅ Free attendee registered:', attendeeRef.id);
+      await adminDb.collection('attendees').add(attendeeData);
 
-      // Update/create user record
-      try {
-        const existingUserQuery = await adminDb
-          .collection('users')
-          .where('email', '==', normalizedEmail)
-          .limit(1)
-          .get();
+      // Update event counters
+      await adminDb.collection('events').doc(eventId).update({
+        attendeeCount: FieldValue.increment(1),
+      });
 
-        if (existingUserQuery.empty) {
-          await adminDb.collection('users').add({
-            email: normalizedEmail,
-            name: sanitize(customerName) || '',
-            surname: sanitize(customerSurname) || '',
-            createdAt: now,
-            updatedAt: now,
-            totalSpent: 0,
-            purchaseCount: 1,
-            events: [eventId],
-            lastPurchase: now,
-          });
-        } else {
-          const userDoc = existingUserQuery.docs[0];
-          const userData = userDoc.data();
-          const updatedEvents = userData.events || [];
-          if (!updatedEvents.includes(eventId)) updatedEvents.push(eventId);
-
-          await userDoc.ref.update({
-            updatedAt: now,
-            purchaseCount: (userData.purchaseCount || 0) + 1,
-            events: updatedEvents,
-            lastPurchase: now,
-          });
-        }
-      } catch (userErr) {
-        console.error('⚠️ Free reg user update failed:', userErr.message);
-      }
-
-      // Update event stats (atomic)
-      try {
-        await adminDb.collection('events').doc(eventId).update({
-          attendeeCount: FieldValue.increment(1),
+      // Update or create user record
+      const usersRef = adminDb.collection('users');
+      const userSnap = await usersRef.where('email', '==', email.toLowerCase()).limit(1).get();
+      if (userSnap.empty) {
+        await usersRef.add({
+          email: email.toLowerCase(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          campus: campus || null,
+          eventCount: 1,
+          totalSpent: 0,
+          firstEventDate: FieldValue.serverTimestamp(),
+          lastEventDate: FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
         });
-      } catch (statsErr) {
-        console.error('⚠️ Free reg stats update failed:', statsErr.message);
+      } else {
+        await userSnap.docs[0].ref.update({
+          eventCount: FieldValue.increment(1),
+          lastEventDate: FieldValue.serverTimestamp(),
+        });
       }
 
       // Send confirmation email
       try {
-        const { sendEmail, getConfirmationEmailTemplate, addContactToBrevo } = await import('../../lib/brevo');
-
-        const formattedDate = eventDate.toLocaleDateString(
-          eventData.language === 'fr' ? 'fr-FR' : 'en-GB',
-          { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
-        );
-        const formattedTime = eventDate.toLocaleTimeString(
-          eventData.language === 'fr' ? 'fr-FR' : 'en-GB',
-          { hour: '2-digit', minute: '2-digit' }
-        );
-
-        await addContactToBrevo({
-          email: normalizedEmail,
-          firstName: sanitize(customerName) || '',
-          lastName: sanitize(customerSurname) || '',
-          eventDate,
-          eventTitle: eventData.title,
-          meetingLink: eventData.meetingLink || '',
+        const { sendEmail, getConfirmationEmailTemplate } = await import('../../lib/brevo');
+        const eventDate = event.date?.toDate ? event.date.toDate() : new Date(event.date);
+        const { subject, htmlContent, textContent } = getConfirmationEmailTemplate({
+          customerName: firstName.trim(),
           eventId,
-          ticketType: resolvedTicketName,
-          listId: parseInt(process.env.BREVO_LIST_ID || '10'),
-        }).catch(err => console.error('⚠️ Brevo contact error:', err.message));
-
-        const emailTemplate = getConfirmationEmailTemplate({
-          customerName: sanitize(customerName) || 'Student',
-          eventId,
-          eventTitle: eventData.title,
-          eventDate: formattedDate,
-          eventTime: formattedTime,
-          meetingLink: eventData.meetingLink || '',
-          ticketName: resolvedTicketName,
-          locale: eventData.language || locale,
+          eventTitle: event.title,
+          eventDate: eventDate.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+          eventTime: eventDate.toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' }),
+          meetingLink: event.meetingLink || '',
+          ticketName,
+          locale,
         });
-
-        await sendEmail({
-          to: normalizedEmail,
-          subject: emailTemplate.subject,
-          htmlContent: emailTemplate.htmlContent,
-          textContent: emailTemplate.textContent,
-        });
-
-        console.log('✅ Free reg email sent to:', normalizedEmail);
+        await sendEmail({ to: email, subject, htmlContent, textContent });
       } catch (emailErr) {
-        console.error('⚠️ Free reg email failed:', emailErr.message);
+        console.error('[CHECKOUT] Email send failed (non-blocking):', emailErr.message);
       }
 
-      const successUrl = `${appUrl}/success?lang=${locale}&event=${eventId}`;
-      return NextResponse.json({ url: successUrl, free: true });
+      // Determine redirect based on category
+      let redirectCategory = '';
+      if (event.category) redirectCategory = `&category=${event.category}`;
+
+      return NextResponse.json({
+        success: true,
+        type: 'free',
+        redirectUrl: `/success?event=${eventId}&lang=${locale}${redirectCategory}`,
+      });
     }
 
-    // ============================================
-    // PAID EVENT → Create Stripe checkout session
-    // ============================================
+    // PAID event path - Create Stripe session
+    if (!stripe) {
+      return NextResponse.json({ error: 'Stripe is not configured' }, { status: 500 });
+    }
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-    const Stripe = (await import('stripe')).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2023-10-16',
-    });
-
-    const productName = resolvedTicketName !== 'General Admission'
-      ? `${eventData.title} - ${resolvedTicketName}`
-      : eventData.title;
+    // Build line items
+    const lineItems = [
+      {
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: `${event.title}${ticketName !== 'General Admission' ? ` - ${ticketName}` : ''}`,
+            description: event.description?.substring(0, 500) || undefined,
+          },
+          unit_amount: Math.round(finalPrice * 100),
+        },
+        quantity: 1,
+      },
+    ];
 
     const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
       mode: 'payment',
-      customer_email: normalizedEmail,
-
-      line_items: [
-        {
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name: productName,
-              description: `Registration for ${eventData.title}`,
-            },
-            unit_amount: Math.round(price * 100),
-          },
-          quantity: 1,
-        },
-      ],
-
-      metadata: {
-        eventId,
-        ticketId: resolvedTicketId,
-        ticketName: resolvedTicketName,
-        customerName: sanitize(customerName) || '',
-        customerSurname: sanitize(customerSurname) || '',
-        customerEmail: normalizedEmail,
-      },
-
-      success_url: `${appUrl}/success?lang=${locale}&event=${eventId}`,
-      cancel_url: `${appUrl}/e/${eventData.slug || eventId}`,
-
-      locale: locale === 'fr' ? 'fr' : 'auto',
-
-      payment_intent_data: {
-        metadata: {
-          eventId,
-          ticketId: resolvedTicketId,
-          ticketName: resolvedTicketName,
-          customerEmail: normalizedEmail,
-        },
-      },
-
-      expires_at: Math.floor(Date.now() / 1000) + 1800,
+      line_items: lineItems,
+      metadata,
+      customer_email: email,
+      success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}&event=${eventId}&lang=${locale}`,
+      cancel_url: `${appUrl}/e/${event.slug}?cancelled=true`,
+      locale: locale === 'fr' ? 'fr' : 'en',
     });
 
-    return NextResponse.json({ url: session.url });
-
-  } catch (error) {
-    console.error('Checkout error:', error);
-
-    return NextResponse.json(
-      { error: 'Failed to create checkout session. Please try again.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    console.error('[CHECKOUT] Error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
-
-// Only allow POST
-export async function GET() {
-  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
 }

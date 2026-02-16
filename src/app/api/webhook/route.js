@@ -65,7 +65,18 @@ export async function POST(request) {
         customerName,
         customerSurname,
         customerEmail,
+        promoCode,
+        promoId,
+        campus,
+        customFields: customFieldsStr,
       } = session.metadata || {};
+
+      let customFieldsObj = {};
+      if (customFieldsStr && typeof customFieldsStr === 'string') {
+        try {
+          customFieldsObj = JSON.parse(customFieldsStr);
+        } catch (_) {}
+      }
 
       console.log('📋 [WEBHOOK] Metadata:', { eventId, ticketId, ticketName, customerEmail });
 
@@ -133,9 +144,22 @@ export async function POST(request) {
         createdAt: now,
         stripeEventId: event.id,
         processedAt: now,
+        ...(campus && { campus }),
+        ...(Object.keys(customFieldsObj).length > 0 && { customFields: customFieldsObj }),
+        ...(promoCode && { promoCode }),
       };
 
       const attendeeRef = await adminDb.collection('attendees').add(attendeeData);
+
+      if (promoId) {
+        try {
+          await adminDb.collection('promos').doc(promoId).update({
+            usedCount: FieldValue.increment(1),
+          });
+        } catch (promoErr) {
+          console.warn('⚠️ [WEBHOOK] Promo usedCount increment failed:', promoErr.message);
+        }
+      }
       console.log('✅ [WEBHOOK] Attendee saved:', attendeeRef.id);
 
       // ============================================

@@ -9,10 +9,14 @@ import { auth } from '../lib/firebase';
 import Link from 'next/link';
 
 const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: '📊' },
-  { name: 'Events', href: '/admin/events', icon: '🎓' },
-  { name: 'Orders', href: '/admin/orders', icon: '🎫' },
-  { name: 'Customers', href: '/admin/users', icon: '👥' },
+  { name: 'Dashboard', href: '/admin', icon: 'D' },
+  { name: 'Events', href: '/admin/events', icon: 'E' },
+  { name: 'Orders', href: '/admin/orders', icon: 'O' },
+  { name: 'Customers', href: '/admin/users', icon: 'C' },
+  { name: 'Categories', href: '/admin/categories', icon: 'T' },
+  { name: 'Campuses', href: '/admin/campuses', icon: 'M' },
+  { name: 'Promos', href: '/admin/promos', icon: 'P' },
+  { name: 'Products', href: '/admin/products', icon: 'R' },
 ];
 
 export default function AdminLayout({ children }) {
@@ -31,7 +35,6 @@ export default function AdminLayout({ children }) {
       }
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, [router]);
 
@@ -59,12 +62,8 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="admin-dashboard min-h-screen bg-gray-50">
-      {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
@@ -74,7 +73,6 @@ export default function AdminLayout({ children }) {
         }`}
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
           <div className="p-6 border-b border-gray-200">
             <Link href="/admin" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
@@ -85,55 +83,58 @@ export default function AdminLayout({ children }) {
             <p className="text-xs text-gray-400 mt-1">Admin Dashboard</p>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1">
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
-              const isActive =
-                item.href === '/admin'
-                  ? pathname === '/admin'
-                  : pathname.startsWith(item.href);
+              const isActive = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.name}
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-600'
-                      : 'text-gray-600 hover:bg-gray-50'
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-sm ${
+                    isActive ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  <span className="text-xl">{item.icon}</span>
+                  <span className={`w-7 h-7 rounded flex items-center justify-center text-xs font-semibold ${
+                    isActive ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {item.icon}
+                  </span>
                   <span className="font-medium">{item.name}</span>
                 </Link>
               );
             })}
 
-            {/* Divider */}
             <div className="my-4 border-t border-gray-200"></div>
 
-            {/* Quick Actions */}
             <Link
               href="/admin/events/new"
               onClick={() => setSidebarOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors text-sm"
             >
-              <span className="text-xl">➕</span>
+              <span className="w-7 h-7 rounded flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-500">+</span>
               <span className="font-medium">Create Event</span>
             </Link>
 
-            {/* View Public Site */}
+            <Link
+              href="/classes"
+              target="_blank"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors text-sm"
+            >
+              <span className="w-7 h-7 rounded flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-500">S</span>
+              <span className="font-medium">Student Page</span>
+            </Link>
+
             <Link
               href="/"
               target="_blank"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors text-sm"
             >
-              <span className="text-xl">🌐</span>
+              <span className="w-7 h-7 rounded flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-500">W</span>
               <span className="font-medium">View Site</span>
             </Link>
           </nav>
 
-          {/* User & Logout */}
           <div className="p-4 border-t border-gray-200">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center">
@@ -142,9 +143,7 @@ export default function AdminLayout({ children }) {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {user.email}
-                </p>
+                <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
                 <p className="text-xs text-gray-500">Admin</p>
               </div>
             </div>
@@ -152,22 +151,16 @@ export default function AdminLayout({ children }) {
               onClick={handleLogout}
               className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2"
             >
-              <span>🚪</span>
               Sign Out
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="lg:pl-64">
-        {/* Top bar (mobile) */}
         <header className="sticky top-0 z-30 bg-white border-b border-gray-200 lg:hidden">
           <div className="flex items-center justify-between px-4 py-3">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-            >
+            <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
@@ -178,11 +171,10 @@ export default function AdminLayout({ children }) {
               </div>
               <span className="font-bold text-indigo-600">Uniflow</span>
             </Link>
-            <div className="w-10" /> {/* Spacer */}
+            <div className="w-10" />
           </div>
         </header>
 
-        {/* Page content */}
         <main className="p-6 lg:p-8">{children}</main>
       </div>
     </div>

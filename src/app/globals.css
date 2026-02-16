@@ -373,3 +373,73 @@ body {
 .dark .glass {
   background: rgba(3,7,18,0.8);
 }
+
+/* ============================================
+   EVENT DETAIL PAGE — Dark theme contrast
+   ============================================ */
+.dark .event-detail-page {
+  background-color: #0a0a0f;
+}
+.dark .event-detail-page .event-detail-topbar.glass {
+  background: rgba(10,10,15,0.9);
+  border-color: rgba(255,255,255,0.08);
+}
+.dark .event-detail-page .event-card {
+  background-color: #1a1a2e !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+}
+.dark .event-detail-page .event-ticket-card {
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.06);
+}
+.dark .event-detail-page .event-card.event-card-who {
+  background-color: rgba(99,102,241,0.12) !important;
+  border-color: rgba(99,102,241,0.25) !important;
+}
+.dark .event-detail-page .event-page-title {
+  color: #ffffff !important;
+}
+.dark .event-detail-page .event-section-label {
+  color: var(--color-primary-400) !important;
+  letter-spacing: 0.08em;
+}
+.dark .event-detail-page .ticket-option {
+  background-color: #16162a !important;
+  border-color: rgba(255,255,255,0.1) !important;
+}
+.dark .event-detail-page .ticket-option:hover:not(.opacity-50) {
+  border-color: rgba(255,255,255,0.18) !important;
+  background-color: #1a1a2e !important;
+}
+.dark .event-detail-page .ticket-option.ticket-option-selected {
+  border-color: var(--color-primary-400) !important;
+  box-shadow: 0 0 0 1px var(--color-primary-400), 0 4px 12px rgba(99,102,241,0.15);
+  background-color: rgba(99,102,241,0.08) !important;
+}
+.dark .event-detail-page .ticket-option-indicator.ticket-option-indicator-selected {
+  border-color: var(--color-primary-400) !important;
+  background-color: var(--color-primary-400) !important;
+}
+.dark .event-detail-page .ticket-option-indicator-selected .ticket-option-check {
+  color: #ffffff !important;
+}
+.dark .event-detail-page .event-registration-form .input,
+.dark .event-detail-page input.input,
+.dark .event-detail-page select.input,
+.dark .event-detail-page textarea.input {
+  background-color: #16162a !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+  color: #f9fafb !important;
+}
+.dark .event-detail-page .event-registration-form .input:focus,
+.dark .event-detail-page input.input:focus,
+.dark .event-detail-page select.input:focus,
+.dark .event-detail-page textarea.input:focus {
+  border-color: var(--color-primary-400) !important;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.25) !important;
+}
+.dark .event-detail-page .event-registration-form .input::placeholder,
+.dark .event-detail-page input.input::placeholder,
+.dark .event-detail-page textarea.input::placeholder {
+  color: rgba(255,255,255,0.4) !important;
+}
