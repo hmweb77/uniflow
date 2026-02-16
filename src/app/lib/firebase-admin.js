@@ -6,7 +6,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 let _app = null;
 let _db = null;
 
-function initAdmin() {
+export function initAdmin() {
   if (_app) return _app;
   const apps = getApps();
   if (apps.length > 0) {

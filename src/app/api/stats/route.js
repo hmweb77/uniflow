@@ -20,10 +20,10 @@ export async function GET(request) {
       ...doc.data(),
     }));
 
-    // Fetch all completed attendees
+    // Fetch all completed attendees (including free and promo_free)
     const attendeesSnap = await adminDb
       .collection('attendees')
-      .where('paymentStatus', '==', 'completed')
+      .where('paymentStatus', 'in', ['completed', 'free', 'promo_free'])
       .get();
     const attendees = attendeesSnap.docs.map((doc) => ({
       id: doc.id,

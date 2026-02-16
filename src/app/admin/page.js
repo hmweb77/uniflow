@@ -23,6 +23,42 @@ import {
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
 
+function NextEventCountdown({ event }) {
+  const [countdown, setCountdown] = useState('');
+
+  useEffect(() => {
+    const calculateCountdown = () => {
+      const eventDate = event.date?.toDate ? event.date.toDate() : new Date(event.date);
+      const now = new Date();
+      const diff = eventDate - now;
+
+      if (diff <= 0) {
+        setCountdown('Starting now!');
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (days > 0) {
+        setCountdown(`${days}d ${hours}h ${minutes}m`);
+      } else if (hours > 0) {
+        setCountdown(`${hours}h ${minutes}m ${seconds}s`);
+      } else {
+        setCountdown(`${minutes}m ${seconds}s`);
+      }
+    };
+
+    calculateCountdown();
+    const interval = setInterval(calculateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [event]);
+
+  return <span className="font-mono text-white font-semibold">{countdown}</span>;
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalEvents: 0,
@@ -64,7 +100,7 @@ export default function AdminDashboard() {
       }));
 
       // Calculate stats
-      const completedAttendees = attendees.filter((a) => a.paymentStatus === 'completed');
+      const completedAttendees = attendees.filter((a) => ['completed', 'free', 'promo_free'].includes(a.paymentStatus));
       
       // Calculate total revenue from amountPaid field
       const totalRevenue = completedAttendees.reduce((sum, a) => sum + (a.amountPaid || 0), 0);
@@ -181,43 +217,6 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Countdown timer for next event
-  const NextEventCountdown = ({ event }) => {
-    const [countdown, setCountdown] = useState('');
-
-    useEffect(() => {
-      const calculateCountdown = () => {
-        const eventDate = event.date?.toDate ? event.date.toDate() : new Date(event.date);
-        const now = new Date();
-        const diff = eventDate - now;
-
-        if (diff <= 0) {
-          setCountdown('Starting now!');
-          return;
-        }
-
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-        if (days > 0) {
-          setCountdown(`${days}d ${hours}h ${minutes}m`);
-        } else if (hours > 0) {
-          setCountdown(`${hours}h ${minutes}m ${seconds}s`);
-        } else {
-          setCountdown(`${minutes}m ${seconds}s`);
-        }
-      };
-
-      calculateCountdown();
-      const interval = setInterval(calculateCountdown, 1000);
-      return () => clearInterval(interval);
-    }, [event]);
-
-    return <span className="font-mono text-white font-semibold">{countdown}</span>;
   };
 
   const formatDate = (timestamp) => {

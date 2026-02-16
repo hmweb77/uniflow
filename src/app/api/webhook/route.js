@@ -242,16 +242,20 @@ export async function POST(request) {
       }
 
       // ============================================
-      // UPDATE EVENT STATS (ATOMIC INCREMENTS)
+      // UPDATE EVENT STATS (TRANSACTION)
       // ============================================
 
       try {
         const eventRef = adminDb.collection('events').doc(eventId);
-        await eventRef.update({
-          attendeeCount: FieldValue.increment(1),
-          totalRevenue: FieldValue.increment(session.amount_total / 100),
+        await adminDb.runTransaction(async (transaction) => {
+          const snap = await transaction.get(eventRef);
+          if (!snap.exists) return;
+          transaction.update(eventRef, {
+            attendeeCount: FieldValue.increment(1),
+            totalRevenue: FieldValue.increment(session.amount_total / 100),
+          });
         });
-        console.log('✅ [WEBHOOK] Event stats updated (atomic)');
+        console.log('✅ [WEBHOOK] Event stats updated (transaction)');
       } catch (eventUpdateErr) {
         console.error('⚠️ [WEBHOOK] Failed to update event stats:', eventUpdateErr.message);
       }

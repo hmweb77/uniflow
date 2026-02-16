@@ -49,7 +49,7 @@ export default function OrdersPage() {
           id: doc.id,
           ...doc.data(),
         }))
-        .filter((a) => a.paymentStatus === 'completed')
+        .filter((a) => ['completed', 'free', 'promo_free'].includes(a.paymentStatus))
         .map((order) => {
           const event = eventsMap[order.eventId];
           return {

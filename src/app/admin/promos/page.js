@@ -57,14 +57,13 @@ export default function PromosPage() {
         maxUses: formData.maxUses ? parseInt(formData.maxUses) : null,
         expiresAt: formData.expiresAt ? new Date(formData.expiresAt) : null,
         active: formData.active,
-        usedCount: 0,
         updatedAt: serverTimestamp(),
       };
 
       if (editing) {
         await updateDoc(doc(db, 'promos', editing), payload);
       } else {
-        await addDoc(collection(db, 'promos'), { ...payload, createdAt: serverTimestamp() });
+        await addDoc(collection(db, 'promos'), { ...payload, usedCount: 0, createdAt: serverTimestamp() });
       }
 
       resetForm();

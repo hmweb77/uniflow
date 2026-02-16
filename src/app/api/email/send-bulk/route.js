@@ -3,8 +3,14 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
 import { sendEmail } from '../../../lib/brevo';
+import { verifyAdminAuth } from '../../../lib/auth-check';
 
 export async function POST(request) {
+  const user = await verifyAdminAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { eventId, subject, body } = await request.json();
 

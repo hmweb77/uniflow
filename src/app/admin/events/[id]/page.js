@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
+import { db, auth } from '../../../lib/firebase';
 import { generateCSV, downloadCSV, generateXLS, downloadXLS } from '../../../lib/utils';
 import Link from 'next/link';
 
@@ -179,9 +179,13 @@ export default function EventDetailPage() {
     if (!confirm('Send thank-you email to all attendees? This will mark the event as thank-you sent.')) return;
     setThankYouSending(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/email/thank-you', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
         body: JSON.stringify({ eventId }),
       });
       const data = await res.json();
@@ -203,9 +207,13 @@ export default function EventDetailPage() {
 
     setSendingEmail(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/email/send-bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
         body: JSON.stringify({
           eventId,
           subject: emailSubject,

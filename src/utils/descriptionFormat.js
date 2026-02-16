@@ -15,10 +15,10 @@ export function formatDescription(text) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-  // Headings (must be at line start): ## -> h3, # -> h2
-  out = out.replace(/^### (.+)$/gm, '<h4 class="font-semibold text-base mt-4 mb-1">$1</h4>');
-  out = out.replace(/^## (.+)$/gm, '<h3 class="font-semibold text-lg mt-4 mb-1">$1</h3>');
-  out = out.replace(/^# (.+)$/gm, '<h2 class="font-bold text-xl mt-4 mb-2">$1</h2>');
+  // Headings (at line start): ### -> h4, ## -> h3, # -> h2 (optional space after #)
+  out = out.replace(/^###\s*(.+)$/gm, (_, c) => '<h4 class="font-semibold text-base mt-4 mb-1">' + c.trim() + '</h4>');
+  out = out.replace(/^##\s*(.+)$/gm, (_, c) => '<h3 class="font-semibold text-lg mt-4 mb-1">' + c.trim() + '</h3>');
+  out = out.replace(/^#\s*(.+)$/gm, (_, c) => '<h2 class="font-bold text-xl mt-4 mb-2">' + c.trim() + '</h2>');
 
   // Bold and italic: **bold** and *italic* (bold before italic to avoid conflict)
   out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');

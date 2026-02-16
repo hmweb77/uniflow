@@ -150,11 +150,30 @@ export async function POST(request) {
 
     // FREE event path
     if (finalPrice === 0) {
-      // Parse customFields back for storage
       let parsedCustomFields = {};
       if (customFieldValues && typeof customFieldValues === 'object') {
         parsedCustomFields = customFieldValues;
       }
+
+      const eventRef = adminDb.collection('events').doc(eventId);
+
+      // Use a transaction to atomically check capacity and register
+      await adminDb.runTransaction(async (transaction) => {
+        const eventSnap = await transaction.get(eventRef);
+        if (!eventSnap.exists) throw new Error('Event not found');
+        const freshEvent = eventSnap.data();
+
+        const currentCount = freshEvent.attendeeCount ?? 0;
+        const max = freshEvent.maxTickets != null ? Number(freshEvent.maxTickets) : null;
+
+        if (freshEvent.soldOut === true || (max != null && currentCount >= max)) {
+          throw new Error('This event is sold out');
+        }
+
+        transaction.update(eventRef, {
+          attendeeCount: FieldValue.increment(1),
+        });
+      });
 
       const attendeeData = {
         eventId,
@@ -165,6 +184,7 @@ export async function POST(request) {
         ticketId: ticketId || null,
         ticketName,
         amount: 0,
+        amountPaid: 0,
         originalPrice: unitPrice,
         discountAmount,
         promoCode: appliedPromo?.code || null,
@@ -182,12 +202,7 @@ export async function POST(request) {
         await adminDb.collection('promos').doc(appliedPromo.id).update({ usedCount: FieldValue.increment(1) });
       }
 
-      // Update event counters
-      await adminDb.collection('events').doc(eventId).update({
-        attendeeCount: FieldValue.increment(1),
-      });
-
-      // Update or create user record
+      // Update or create user record (match webhook: purchaseCount, events, lastPurchase)
       const usersRef = adminDb.collection('users');
       const userSnap = await usersRef.where('email', '==', email.toLowerCase()).limit(1).get();
       if (userSnap.empty) {
@@ -195,17 +210,26 @@ export async function POST(request) {
           email: email.toLowerCase(),
           firstName: firstName.trim(),
           lastName: lastName.trim(),
+          name: firstName.trim(),
+          surname: lastName.trim(),
           campus: campus || null,
-          eventCount: 1,
+          purchaseCount: 1,
           totalSpent: 0,
-          firstEventDate: FieldValue.serverTimestamp(),
-          lastEventDate: FieldValue.serverTimestamp(),
+          events: [eventId],
+          lastPurchase: FieldValue.serverTimestamp(),
           createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         });
       } else {
+        const existingData = userSnap.docs[0].data();
+        const updatedEvents = existingData.events || [];
+        if (!updatedEvents.includes(eventId)) updatedEvents.push(eventId);
+
         await userSnap.docs[0].ref.update({
-          eventCount: FieldValue.increment(1),
-          lastEventDate: FieldValue.serverTimestamp(),
+          purchaseCount: FieldValue.increment(1),
+          events: updatedEvents,
+          lastPurchase: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         });
       }
 
