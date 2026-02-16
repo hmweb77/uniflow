@@ -375,6 +375,9 @@ body {
 }
 
 /* Event description — bold, italic, headings (from formatDescription / pasted HTML) */
+.event-description-content {
+  white-space: pre-wrap; /* preserve spaces and allow empty lines */
+}
 .event-description-content h2,
 .event-description-content h3,
 .event-description-content h4 {
@@ -382,13 +385,13 @@ body {
   margin-bottom: 0.5rem;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: normal; /* headings wrap normally */
 }
 .event-description-content h2 { font-size: 1.25rem; }
 .event-description-content h3 { font-size: 1.125rem; }
 .event-description-content h4 { font-size: 1rem; }
 .event-description-content strong { font-weight: 600; }
 .event-description-content em { font-style: italic; }
-.event-description-content br + br { display: none; }
 
 /* ============================================
    EVENT DETAIL PAGE — Dark theme contrast
