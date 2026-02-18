@@ -28,10 +28,12 @@ function getLowestPrice(event) {
 export default function EventsPage() {
   const { locale, t } = useLocale();
   const [events, setEvents] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [selectedFormat, setSelectedFormat] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [priceRange, setPriceRange] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -40,7 +42,21 @@ export default function EventsPage() {
 
   useEffect(() => {
     fetchEvents();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const catsRef = collection(db, 'categories');
+      const catsSnap = await getDocs(catsRef);
+      const data = catsSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      setCategories(data);
+    } catch {
+      setCategories([]);
+    }
+  };
 
   const fetchEvents = async () => {
     try {
@@ -80,6 +96,9 @@ export default function EventsPage() {
 
     if (selectedLanguage !== 'all') result = result.filter((e) => e.language === selectedLanguage);
     if (selectedFormat !== 'all') result = result.filter((e) => e.format === selectedFormat);
+    if (selectedCategory !== 'all') {
+      result = result.filter((e) => e.category === selectedCategory || e.categoryId === selectedCategory);
+    }
     if (priceRange !== 'all') {
       result = result.filter((event) => {
         const price = getLowestPrice(event);
@@ -102,7 +121,7 @@ export default function EventsPage() {
     }
 
     return result;
-  }, [events, searchTerm, selectedLanguage, selectedFormat, priceRange, sortBy]);
+  }, [events, searchTerm, selectedLanguage, selectedFormat, selectedCategory, priceRange, sortBy]);
 
   const upcomingEvents = filteredEvents.filter((e) => isUpcoming(e.date));
   const pastEvents = filteredEvents.filter((e) => !isUpcoming(e.date));
@@ -111,14 +130,16 @@ export default function EventsPage() {
     setSearchTerm('');
     setSelectedLanguage('all');
     setSelectedFormat('all');
+    setSelectedCategory('all');
     setPriceRange('all');
     setSortBy('date');
   };
 
-  const hasActiveFilters = searchTerm || selectedLanguage !== 'all' || selectedFormat !== 'all' || priceRange !== 'all';
+  const hasActiveFilters = searchTerm || selectedLanguage !== 'all' || selectedFormat !== 'all' || selectedCategory !== 'all' || priceRange !== 'all';
   const activeFilterCount = [
     selectedLanguage !== 'all',
     selectedFormat !== 'all',
+    selectedCategory !== 'all',
     priceRange !== 'all',
     searchTerm.trim().length > 0,
   ].filter(Boolean).length;
@@ -216,6 +237,17 @@ export default function EventsPage() {
               ]}
               active={priceRange !== 'all'}
             />
+            {categories.length > 0 && (
+              <FilterChip
+                value={selectedCategory}
+                onChange={setSelectedCategory}
+                options={[
+                  { value: 'all', label: locale === 'fr' ? 'Toutes catégories' : 'All Categories' },
+                  ...categories.map((cat) => ({ value: cat.id, label: cat.name || cat.id })),
+                ]}
+                active={selectedCategory !== 'all'}
+              />
+            )}
 
             {/* Divider */}
             <div
@@ -336,6 +368,19 @@ export default function EventsPage() {
                   <option value="10to25">{ep.range10to25 || '€10 – €25'}</option>
                   <option value="over25">{ep.over25 || 'Over €25'}</option>
                 </select>
+
+                {categories.length > 0 && (
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="input select text-sm py-2.5"
+                  >
+                    <option value="all">{locale === 'fr' ? 'Toutes catégories' : 'All Categories'}</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name || cat.id}</option>
+                    ))}
+                  </select>
+                )}
 
                 <select
                   value={sortBy}

@@ -274,15 +274,19 @@ export async function POST(request) {
         eventDate = new Date(eventData.date);
       }
 
-      const formattedDate = eventDate.toLocaleDateString(
-        eventData.language === 'fr' ? 'fr-FR' : 'en-GB',
-        { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
-      );
-
-      const formattedTime = eventDate.toLocaleTimeString(
-        eventData.language === 'fr' ? 'fr-FR' : 'en-GB',
-        { hour: '2-digit', minute: '2-digit' }
-      );
+      const locale = eventData.language === 'fr' ? 'fr-FR' : 'en-GB';
+      const formattedDate = `${eventDate.toLocaleDateString(locale, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      })} (UTC)`;
+      const formattedTime = `${eventDate.toLocaleTimeString(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'UTC',
+      })} (UTC)`;
 
       // Check if Brevo is configured
       if (!process.env.BREVO_API_KEY) {

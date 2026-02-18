@@ -233,16 +233,27 @@ export async function POST(request) {
         });
       }
 
-      // Send confirmation email
+      // Send confirmation email (UTC so unambiguous; calendar link shows user's local time)
       try {
         const { sendEmail, getConfirmationEmailTemplate } = await import('../../lib/brevo');
         const eventDate = event.date?.toDate ? event.date.toDate() : new Date(event.date);
+        const utcDateStr = eventDate.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          timeZone: 'UTC',
+        });
+        const utcTimeStr = eventDate.toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'UTC',
+        });
         const { subject, htmlContent, textContent } = getConfirmationEmailTemplate({
           customerName: firstName.trim(),
           eventId,
           eventTitle: event.title,
-          eventDate: eventDate.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-          eventTime: eventDate.toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' }),
+          eventDate: `${utcDateStr} (UTC)`,
+          eventTime: `${utcTimeStr} (UTC)`,
           meetingLink: event.meetingLink || '',
           ticketName,
           locale,

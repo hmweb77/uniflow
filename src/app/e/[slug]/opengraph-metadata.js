@@ -54,12 +54,17 @@ export async function generateEventMetadata(slug) {
       ? cleanDesc.substring(0, 157) + (cleanDesc.length > 157 ? '...' : '')
       : `Register for ${event.title}`;
 
-    // Build a richer preview with date info if available
+    // Build a richer preview with date info if available (UTC for consistent preview)
     let eventDateStr = '';
     if (event.date) {
       try {
         const d = event.date.toDate ? event.date.toDate() : new Date(event.date);
-        eventDateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        eventDateStr = d.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'UTC',
+        });
       } catch {}
     }
     const ogDescription = eventDateStr ? `${eventDateStr} · ${description}` : description;

@@ -12,6 +12,7 @@ import LocaleToggle from '@/components/ui/LocaleToggle';
 import RegistrationForm from '@/components/RegistrationForm';
 import { cleanDashes } from '@/utils/textCleanup';
 import { renderDescription } from '@/utils/descriptionFormat';
+import { formatEventDate, formatEventTime } from '../../lib/utils';
 
 export default function PublicEventPage() {
   const params = useParams();
@@ -69,25 +70,8 @@ export default function PublicEventPage() {
     }
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatDate = (timestamp) => formatEventDate(timestamp, locale, { long: true });
+  const formatTime = (timestamp) => formatEventTime(timestamp, locale);
 
   const getFormatLabel = (format) => {
     const labels = {

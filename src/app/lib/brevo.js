@@ -258,6 +258,9 @@ export function getConfirmationEmailTemplate({
       <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #2d5a2d;">
         ${isEnglish ? 'Add to your calendar' : 'Ajouter a votre calendrier'}
       </p>
+      <p style="margin: 0 0 10px 0; font-size: 12px; color: #5a7a5a;">
+        ${isEnglish ? 'Add to calendar to see this event in your local time.' : "Ajoutez au calendrier pour voir l'heure dans votre fuseau horaire."}
+      </p>
       <div>
         <a href="${calendarGoogleUrl}" style="display: inline-block; background: #ffffff; color: #1a1a2e; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 13px; border: 1px solid #d4e8d4; margin-right: 6px; margin-bottom: 6px;">Google</a>
         <a href="${calendarOutlookUrl}" style="display: inline-block; background: #ffffff; color: #1a1a2e; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 13px; border: 1px solid #d4e8d4; margin-right: 6px; margin-bottom: 6px;">Outlook</a>

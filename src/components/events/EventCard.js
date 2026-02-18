@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useLocale } from '@/contexts/LocaleContext';
+import { formatEventDate, formatEventTime } from '@/app/lib/utils';
 
 function parseDate(timestamp) {
   if (!timestamp) return new Date(0);
@@ -23,16 +24,8 @@ export default function EventCard({ event, isUpcoming = true }) {
   const price = getLowestPrice(event);
   const hasMultipleTickets = event.tickets && event.tickets.length > 1;
 
-  const date = parseDate(event.date);
-  const formattedDate = date.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  const formattedTime = date.toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const formattedDate = formatEventDate(event.date, locale);
+  const formattedTime = formatEventTime(event.date, locale);
 
   const formatLabel = {
     en: { live: 'Live', replay: 'Replay', materials: 'Materials', hybrid: 'Hybrid' },
@@ -86,8 +79,13 @@ export default function EventCard({ event, isUpcoming = true }) {
           )}
         </div>
 
-        {/* Language & Format badges */}
-        <div className="absolute top-3 left-3 flex gap-2">
+        {/* Category, Language & Format badges */}
+        <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+          {event.categoryName || event.category ? (
+            <span className="glass px-2.5 py-1 rounded-full text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+              {event.categoryName || event.category}
+            </span>
+          ) : null}
           <span className="glass px-2.5 py-1 rounded-full text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
             {event.language === 'fr' ? 'FR' : 'EN'}
           </span>

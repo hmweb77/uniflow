@@ -13,18 +13,60 @@ export function generateEventSlug(title) {
 
 export function formatPrice(amount) { return `${amount.toFixed(2)} €`; }
 
-export function formatEventDate(date, locale = 'en') {
-  const dateObj = date instanceof Date ? date : new Date(date);
-  return dateObj.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB');
+/**
+ * Normalize event date from Firestore timestamp, Date, or ISO string.
+ * Use in client components only (display uses environment default = user timezone).
+ */
+export function parseEventDate(timestamp) {
+  if (!timestamp) return null;
+  if (timestamp instanceof Date) return timestamp;
+  if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+  if (timestamp._seconds != null) return new Date(timestamp._seconds * 1000);
+  if (timestamp.seconds != null) return new Date(timestamp.seconds * 1000);
+  return new Date(timestamp);
 }
 
-export function formatEventTime(date) {
-  const dateObj = date instanceof Date ? date : new Date(date);
-  return dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const localeToBcp47 = (locale) => (locale === 'fr' ? 'fr-FR' : 'en-GB');
+
+/**
+ * Format event date in the viewer's timezone (client-only; no timeZone = browser default).
+ * @param {Date|object} date - Date, Firestore timestamp, or ISO string
+ * @param {string} locale - 'en' | 'fr'
+ * @param {{ long?: boolean }} options - long: weekday + long month (e.g. event page)
+ */
+export function formatEventDate(date, locale = 'en', options = {}) {
+  const dateObj = parseEventDate(date);
+  if (!dateObj || isNaN(dateObj.getTime())) return '';
+  const bcp = localeToBcp47(locale);
+  if (options.long) {
+    return dateObj.toLocaleDateString(bcp, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  }
+  return dateObj.toLocaleDateString(bcp, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Format event time in the viewer's timezone (client-only; no timeZone = browser default).
+ */
+export function formatEventTime(date, locale = 'en') {
+  const dateObj = parseEventDate(date);
+  if (!dateObj || isNaN(dateObj.getTime())) return '';
+  return dateObj.toLocaleTimeString(localeToBcp47(locale), {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function formatEventDateTime(date, locale = 'en') {
-  return `${formatEventDate(date, locale)} - ${formatEventTime(date)}`;
+  return `${formatEventDate(date, locale)} - ${formatEventTime(date, locale)}`;
 }
 
 export function toDate(timestamp) {

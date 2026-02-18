@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { useLocale } from '@/contexts/LocaleContext';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import LocaleToggle from '@/components/ui/LocaleToggle';
+import { formatEventDate, formatEventTime } from '../lib/utils';
 
 function parseDate(timestamp) {
   if (!timestamp) return new Date(0);
@@ -178,22 +179,8 @@ function ClassesContent() {
     return groups;
   }, [filteredEvents, filteredProducts, categories, activeCategory, locale]);
 
-  const formatDate = (timestamp) => {
-    const date = parseDate(timestamp);
-    return date.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const formatTime = (timestamp) => {
-    const date = parseDate(timestamp);
-    return date.toLocaleTimeString(locale === 'fr' ? 'fr-FR' : 'en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatDate = (timestamp) => formatEventDate(timestamp, locale);
+  const formatTime = (timestamp) => formatEventTime(timestamp, locale);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
@@ -395,12 +382,12 @@ function ProductCard({ product, locale }) {
         >
           {product.price === 0 ? (locale === 'fr' ? 'Gratuit' : 'Free') : `${product.price} EUR`}
         </div>
-        {product.categoryName && (
+        {(product.categoryName || product.category) && (
           <div
             className="absolute top-3 left-3 px-2 py-1 rounded text-xs font-medium"
             style={{ backgroundColor: 'rgba(255,255,255,0.92)', color: '#48485c' }}
           >
-            {product.categoryName}
+            {product.categoryName || product.category}
           </div>
         )}
       </div>
