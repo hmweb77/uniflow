@@ -10,6 +10,7 @@ import useImageUpload from '@/app/hooks/useImageUpload';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -24,13 +25,25 @@ export default function ProductsPage() {
     includes: '',
     status: 'published',
     downloadUrl: '',
+    category: '',
   });
   const [bannerFile, setBannerFile] = useState(null);
   const [bannerPreview, setBannerPreview] = useState(null);
 
   useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'categories'));
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setCategories(data.sort((a, b) => (a.order || 0) - (b.order || 0)));
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -72,6 +85,8 @@ export default function ProductsPage() {
 
       const slug = formData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const includesArr = formData.includes.split(',').map((s) => s.trim()).filter(Boolean);
+      const categoryId = formData.category?.trim() || null;
+      const categoryName = categoryId ? (categories.find((c) => c.id === categoryId)?.name || '') : '';
 
       const payload = {
         title: formData.title.trim(),
@@ -85,6 +100,13 @@ export default function ProductsPage() {
         isDigitalProduct: true,
         updatedAt: serverTimestamp(),
       };
+      if (categoryId) {
+        payload.category = categoryId;
+        payload.categoryName = categoryName;
+      } else {
+        payload.category = null;
+        payload.categoryName = null;
+      }
 
       if (bannerUrl) payload.bannerUrl = bannerUrl;
 
@@ -110,7 +132,7 @@ export default function ProductsPage() {
   };
 
   const resetForm = () => {
-    setFormData({ title: '', description: '', price: '', type: 'notes', includes: '', status: 'published', downloadUrl: '' });
+    setFormData({ title: '', description: '', price: '', type: 'notes', includes: '', status: 'published', downloadUrl: '', category: '' });
     setBannerFile(null);
     setBannerPreview(null);
     setShowForm(false);
@@ -126,6 +148,7 @@ export default function ProductsPage() {
       includes: (product.includes || []).join(', '),
       status: product.status || 'published',
       downloadUrl: product.downloadUrl || '',
+      category: product.category || '',
     });
     setBannerPreview(product.bannerUrl || null);
     setEditing(product.id);
@@ -254,6 +277,20 @@ export default function ProductsPage() {
                   <option value="draft">Draft</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category (for Classes page)</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="">No category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Products with a category appear on /classes</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>

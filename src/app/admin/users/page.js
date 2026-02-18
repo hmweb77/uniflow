@@ -9,9 +9,12 @@ import { db } from '../../lib/firebase';
 import { generateCSV, downloadCSV, generateXLS, downloadXLS } from '../../lib/utils';
 import Link from 'next/link';
 
+const PAYMENT_STATUS_EXPORT = ['completed', 'paid', 'free', 'promo_free'];
+
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [events, setEvents] = useState({});
+  const [allOrders, setAllOrders] = useState([]); // all attendees/orders for CSV export
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('totalSpent');
@@ -33,6 +36,14 @@ export default function UsersPage() {
         eventsMap[doc.id] = { id: doc.id, ...doc.data() };
       });
       setEvents(eventsMap);
+
+      // Always fetch all orders (attendees) for CSV export with order id, campus, etc.
+      const attendeesRef = collection(db, 'attendees');
+      const attendeesSnap = await getDocs(attendeesRef);
+      const ordersList = attendeesSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((a) => PAYMENT_STATUS_EXPORT.includes(a.paymentStatus));
+      setAllOrders(ordersList);
 
       // Try to fetch from 'users' collection first
       let usersData = [];
@@ -80,7 +91,7 @@ export default function UsersPage() {
         // Group attendees by email
         const usersMap = {};
         attendees.forEach((attendee) => {
-          if (attendee.paymentStatus !== 'completed') return;
+          if (!PAYMENT_STATUS_EXPORT.includes(attendee.paymentStatus)) return;
 
           const email = attendee.email?.toLowerCase();
           if (!email) return;
@@ -154,6 +165,18 @@ export default function UsersPage() {
     });
   };
 
+  const formatShortDate = (timestamp) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const handleSort = (field) => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -204,22 +227,35 @@ export default function UsersPage() {
 
   const handleExportCSV = () => {
     const headers = [
-      { key: 'name', label: 'First Name' },
-      { key: 'surname', label: 'Last Name' },
+      { key: 'orderId', label: 'Order ID' },
+      { key: 'firstName', label: 'First Name' },
+      { key: 'lastName', label: 'Last Name' },
       { key: 'email', label: 'Email' },
-      { key: 'purchaseCount', label: 'Purchases' },
-      { key: 'totalSpent', label: 'Total Spent (€)' },
-      { key: 'courses', label: 'Courses' },
+      { key: 'course', label: 'Course' },
+      { key: 'ticketName', label: 'Ticket Type' },
+      { key: 'amountPaid', label: 'Amount Paid (€)' },
+      { key: 'campus', label: 'Campus' },
+      { key: 'promoCode', label: 'Promo Code' },
+      { key: 'paymentStatus', label: 'Payment Status' },
+      { key: 'createdAt', label: 'Registration Date' },
     ];
 
-    const data = users.map((user) => ({
-      name: user.name || '',
-      surname: user.surname || '',
-      email: user.email || '',
-      purchaseCount: user.purchaseCount || user.purchases?.length || 0,
-      totalSpent: (user.totalSpent || 0).toFixed(2),
-      courses: (user.purchases || []).map((p) => p.eventTitle).join('; '),
-    }));
+    const data = allOrders.map((order) => {
+      const event = events[order.eventId];
+      return {
+        orderId: order.id || '',
+        firstName: order.firstName || order.name || '',
+        lastName: order.lastName || order.surname || '',
+        email: order.email || '',
+        course: event?.title || order.eventTitle || 'Unknown Event',
+        ticketName: order.ticketName || 'General Admission',
+        amountPaid: (order.amountPaid != null ? order.amountPaid : 0).toFixed(2),
+        campus: order.campus || '',
+        promoCode: order.promoCode || '',
+        paymentStatus: order.paymentStatus || '',
+        createdAt: formatShortDate(order.createdAt),
+      };
+    });
 
     const csv = generateCSV(data, headers);
     downloadCSV(csv, `uniflow_customers_${new Date().toISOString().split('T')[0]}.csv`);
@@ -227,22 +263,35 @@ export default function UsersPage() {
 
   const handleExportXLS = () => {
     const headers = [
-      { key: 'name', label: 'First Name' },
-      { key: 'surname', label: 'Last Name' },
+      { key: 'orderId', label: 'Order ID' },
+      { key: 'firstName', label: 'First Name' },
+      { key: 'lastName', label: 'Last Name' },
       { key: 'email', label: 'Email' },
-      { key: 'purchaseCount', label: 'Purchases' },
-      { key: 'totalSpent', label: 'Total Spent (€)' },
-      { key: 'courses', label: 'Courses' },
+      { key: 'course', label: 'Course' },
+      { key: 'ticketName', label: 'Ticket Type' },
+      { key: 'amountPaid', label: 'Amount Paid (€)' },
+      { key: 'campus', label: 'Campus' },
+      { key: 'promoCode', label: 'Promo Code' },
+      { key: 'paymentStatus', label: 'Payment Status' },
+      { key: 'createdAt', label: 'Registration Date' },
     ];
 
-    const data = users.map((user) => ({
-      name: user.name || '',
-      surname: user.surname || '',
-      email: user.email || '',
-      purchaseCount: user.purchaseCount || user.purchases?.length || 0,
-      totalSpent: (user.totalSpent || 0).toFixed(2),
-      courses: (user.purchases || []).map((p) => p.eventTitle).join('; '),
-    }));
+    const data = allOrders.map((order) => {
+      const event = events[order.eventId];
+      return {
+        orderId: order.id || '',
+        firstName: order.firstName || order.name || '',
+        lastName: order.lastName || order.surname || '',
+        email: order.email || '',
+        course: event?.title || order.eventTitle || 'Unknown Event',
+        ticketName: order.ticketName || 'General Admission',
+        amountPaid: (order.amountPaid != null ? order.amountPaid : 0).toFixed(2),
+        campus: order.campus || '',
+        promoCode: order.promoCode || '',
+        paymentStatus: order.paymentStatus || '',
+        createdAt: formatShortDate(order.createdAt),
+      };
+    });
 
     const xls = generateXLS(data, headers);
     downloadXLS(xls, `uniflow_customers_${new Date().toISOString().split('T')[0]}.xls`);
@@ -278,14 +327,14 @@ export default function UsersPage() {
         <div className="flex gap-3">
           <button
             onClick={handleExportCSV}
-            disabled={users.length === 0}
+            disabled={allOrders.length === 0}
             className="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
           >
             📥 CSV
           </button>
           <button
             onClick={handleExportXLS}
-            disabled={users.length === 0}
+            disabled={allOrders.length === 0}
             className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
           >
             📊 Export XLS

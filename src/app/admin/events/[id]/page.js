@@ -140,12 +140,14 @@ export default function EventDetailPage() {
       { key: 'email', label: 'Email' },
       { key: 'ticketName', label: 'Ticket Type' },
       { key: 'amountPaid', label: 'Amount Paid (€)' },
+      { key: 'campus', label: 'Campus' },
       { key: 'createdAt', label: 'Registration Date' },
     ];
 
     const data = filteredAttendees.map((a) => ({
       ...a,
       amountPaid: a.amountPaid?.toFixed(2) || '0.00',
+      campus: a.campus || '',
       createdAt: formatShortDate(a.createdAt),
     }));
 
@@ -161,12 +163,14 @@ export default function EventDetailPage() {
       { key: 'email', label: 'Email' },
       { key: 'ticketName', label: 'Ticket Type' },
       { key: 'amountPaid', label: 'Amount Paid (€)' },
+      { key: 'campus', label: 'Campus' },
       { key: 'createdAt', label: 'Registration Date' },
     ];
 
     const data = filteredAttendees.map((a) => ({
       ...a,
       amountPaid: a.amountPaid?.toFixed(2) || '0.00',
+      campus: a.campus || '',
       createdAt: formatShortDate(a.createdAt),
     }));
 
@@ -557,6 +561,7 @@ export default function EventDetailPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campus</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                 </tr>
               </thead>
@@ -578,6 +583,9 @@ export default function EventDetailPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       €{attendee.amountPaid?.toFixed(2) || '0.00'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {attendee.campus || '–'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatShortDate(attendee.createdAt)}

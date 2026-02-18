@@ -31,6 +31,7 @@ function ClassesContent() {
   const searchParams = useSearchParams();
   const { locale, t } = useLocale();
   const [events, setEvents] = useState([]);
+  const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -70,6 +71,18 @@ function ClassesContent() {
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((e) => e.status !== 'cancelled' && e.visibility !== 'private');
       setEvents(eventsData);
+
+      // Fetch published digital products (with category so they appear on classes)
+      try {
+        const productsRef = collection(db, 'products');
+        const productsSnap = await getDocs(productsRef);
+        const productsData = productsSnap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((p) => p.status === 'published' && p.isDigitalProduct && p.category);
+        setProducts(productsData);
+      } catch {
+        setProducts([]);
+      }
     } catch (err) {
       console.error('Error fetching classes:', err);
       // Fallback fetch without ordering
@@ -113,32 +126,57 @@ function ClassesContent() {
     return result.sort((a, b) => parseDate(a.date) - parseDate(b.date));
   }, [events, activeCategory, searchTerm, now]);
 
-  // Group by category
+  const filteredProducts = useMemo(() => {
+    let result = products;
+    if (activeCategory !== 'all') {
+      result = result.filter((p) => p.category === activeCategory || p.categoryId === activeCategory);
+    }
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase();
+      result = result.filter(
+        (p) =>
+          (p.title || '').toLowerCase().includes(search) ||
+          (p.description || '').toLowerCase().includes(search)
+      );
+    }
+    return result;
+  }, [products, activeCategory, searchTerm]);
+
+  // Group by category (events + products)
   const groupedEvents = useMemo(() => {
     if (activeCategory !== 'all') return null;
 
     const groups = {};
     categories.forEach((cat) => {
-      groups[cat.id] = {
-        category: cat,
-        events: filteredEvents.filter((e) => e.category === cat.id || e.categoryId === cat.id),
-      };
+      const catEvents = filteredEvents.filter((e) => e.category === cat.id || e.categoryId === cat.id);
+      const catProducts = filteredProducts.filter((p) => p.category === cat.id || p.categoryId === cat.id);
+      if (catEvents.length > 0 || catProducts.length > 0) {
+        groups[cat.id] = {
+          category: cat,
+          events: catEvents,
+          products: catProducts,
+        };
+      }
     });
 
-    // Uncategorized
+    // Uncategorized events
     const categorizedIds = new Set(categories.map((c) => c.id));
-    const uncategorized = filteredEvents.filter(
+    const uncategorizedEvents = filteredEvents.filter(
       (e) => !categorizedIds.has(e.category) && !categorizedIds.has(e.categoryId)
     );
-    if (uncategorized.length > 0) {
+    const uncategorizedProducts = filteredProducts.filter(
+      (p) => !categorizedIds.has(p.category) && !categorizedIds.has(p.categoryId)
+    );
+    if (uncategorizedEvents.length > 0 || uncategorizedProducts.length > 0) {
       groups['_uncategorized'] = {
         category: { id: '_uncategorized', name: locale === 'fr' ? 'Autres cours' : 'Other Classes' },
-        events: uncategorized,
+        events: uncategorizedEvents,
+        products: uncategorizedProducts,
       };
     }
 
     return groups;
-  }, [filteredEvents, categories, activeCategory, locale]);
+  }, [filteredEvents, filteredProducts, categories, activeCategory, locale]);
 
   const formatDate = (timestamp) => {
     const date = parseDate(timestamp);
@@ -245,8 +283,8 @@ function ClassesContent() {
           </div>
         )}
 
-        {/* Events Display */}
-        {!loading && filteredEvents.length === 0 && (
+        {/* Empty state when no events and no products */}
+        {!loading && filteredEvents.length === 0 && filteredProducts.length === 0 && (
           <div className="text-center py-16">
             <div
               className="w-14 h-14 mx-auto mb-4 rounded-xl flex items-center justify-center"
@@ -272,24 +310,28 @@ function ClassesContent() {
         {!loading && activeCategory === 'all' && groupedEvents && (
           <div className="space-y-10">
             {Object.entries(groupedEvents).map(([key, group]) => {
-              if (group.events.length === 0) return null;
+              const total = (group.events?.length || 0) + (group.products?.length || 0);
+              if (total === 0) return null;
               return (
                 <div key={key}>
                   <h2 className="text-xl font-bold mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                     {group.category.name}
                     <span className="text-sm font-normal" style={{ color: 'var(--text-tertiary)' }}>
-                      ({group.events.length})
+                      ({total})
                     </span>
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {group.events.map((event) => (
+                    {group.events?.map((event) => (
                       <ClassCard
-                        key={event.id}
+                        key={`e-${event.id}`}
                         event={event}
                         locale={locale}
                         formatDate={formatDate}
                         formatTime={formatTime}
                       />
+                    ))}
+                    {group.products?.map((product) => (
+                      <ProductCard key={`p-${product.id}`} product={product} locale={locale} />
                     ))}
                   </div>
                 </div>
@@ -299,16 +341,19 @@ function ClassesContent() {
         )}
 
         {/* Filtered View (when specific category is selected) */}
-        {!loading && activeCategory !== 'all' && filteredEvents.length > 0 && (
+        {!loading && activeCategory !== 'all' && (filteredEvents.length > 0 || filteredProducts.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredEvents.map((event) => (
               <ClassCard
-                key={event.id}
+                key={`e-${event.id}`}
                 event={event}
                 locale={locale}
                 formatDate={formatDate}
                 formatTime={formatTime}
               />
+            ))}
+            {filteredProducts.map((product) => (
+              <ProductCard key={`p-${product.id}`} product={product} locale={locale} />
             ))}
           </div>
         )}
@@ -321,6 +366,67 @@ function ClassesContent() {
         </p>
       </div>
     </div>
+  );
+}
+
+function ProductCard({ product, locale }) {
+  return (
+    <Link
+      href={`/p/${product.slug}`}
+      className="group block overflow-hidden rounded-xl border transition-all"
+      style={{
+        backgroundColor: 'var(--bg-primary)',
+        borderColor: 'var(--border-light)',
+      }}
+    >
+      <div className="h-44 relative overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+        {product.bannerUrl ? (
+          <img
+            src={product.bannerUrl}
+            alt={product.title}
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full" style={{ background: 'linear-gradient(135deg, #2d2d3f, #1a1a2e)' }} />
+        )}
+        <div
+          className="absolute top-3 right-3 px-3 py-1 rounded-md text-sm font-semibold"
+          style={{ backgroundColor: 'rgba(255,255,255,0.92)', color: '#1a1a2e' }}
+        >
+          {product.price === 0 ? (locale === 'fr' ? 'Gratuit' : 'Free') : `${product.price} EUR`}
+        </div>
+        {product.categoryName && (
+          <div
+            className="absolute top-3 left-3 px-2 py-1 rounded text-xs font-medium"
+            style={{ backgroundColor: 'rgba(255,255,255,0.92)', color: '#48485c' }}
+          >
+            {product.categoryName}
+          </div>
+        )}
+      </div>
+      <div className="p-4">
+        <h3 className="text-base font-semibold mb-1 line-clamp-2" style={{ color: 'var(--text-primary)' }}>
+          {product.title}
+        </h3>
+        {product.description && (
+          <p className="text-sm mb-2 line-clamp-2" style={{ color: 'var(--text-secondary)' }}>
+            {product.description}
+          </p>
+        )}
+        <span
+          className="text-xs px-2 py-0.5 rounded"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+        >
+          {product.type === 'recording'
+            ? (locale === 'fr' ? 'Enregistrement' : 'Recording')
+            : product.type === 'notes'
+              ? (locale === 'fr' ? 'Notes' : 'Notes')
+              : product.type === 'bundle'
+                ? (locale === 'fr' ? 'Pack' : 'Bundle')
+                : product.type}
+        </span>
+      </div>
+    </Link>
   );
 }
 
