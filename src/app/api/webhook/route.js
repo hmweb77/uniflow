@@ -58,26 +58,92 @@ export async function POST(request) {
     console.log('💳 [WEBHOOK] Processing checkout:', session.id);
 
     try {
-      // const {
-      //   eventId,
-      //   ticketId,
-      //   ticketName,
-      //   customerName,
-      //   customerSurname,
-      //   customerEmail,
-      //   promoCode,
-      //   promoId,
-      //   campus,
-      //   customFields: customFieldsStr,
-      // } = session.metadata || {};
+      const metadata = session.metadata || {};
 
-      // let customFieldsObj = {};
-      // if (customFieldsStr && typeof customFieldsStr === 'string') {
-      //   try {
-      //     customFieldsObj = JSON.parse(customFieldsStr);
-      //   } catch (_) {}
-      // }
+      // ============================================
+      // PRODUCT PURCHASE (digital product)
+      // ============================================
+      if (metadata.orderType === 'product') {
+        const { productId, productTitle, firstName, lastName, email, promoCode, promoId, campus } = metadata;
+        const normalizedEmail = (email || '').toLowerCase().trim();
 
+        if (!productId || !normalizedEmail) {
+          console.error('❌ [WEBHOOK] Product checkout missing metadata');
+          return NextResponse.json({ error: 'Missing metadata' }, { status: 400 });
+        }
+
+        const existingOrder = await adminDb
+          .collection('product_orders')
+          .where('stripeSessionId', '==', session.id)
+          .limit(1)
+          .get();
+
+        if (!existingOrder.empty) {
+          console.log('⚠️ [WEBHOOK] Product order already processed:', session.id);
+          return NextResponse.json({ received: true, status: 'duplicate' });
+        }
+
+        const productDoc = await adminDb.collection('products').doc(productId).get();
+        const product = productDoc.exists ? productDoc.data() : {};
+        const downloadUrl = product.downloadUrl || null;
+
+        const orderData = {
+          productId,
+          productTitle: productTitle || product.title,
+          firstName: firstName || '',
+          lastName: lastName || '',
+          email: normalizedEmail,
+          amountPaid: session.amount_total / 100,
+          currency: session.currency || 'eur',
+          paymentStatus: 'completed',
+          stripeSessionId: session.id,
+          stripePaymentIntent: session.payment_intent,
+          createdAt: new Date(),
+          ...(campus && { campus }),
+          ...(promoCode && { promoCode }),
+        };
+
+        await adminDb.collection('product_orders').add(orderData);
+        console.log('✅ [WEBHOOK] Product order saved');
+
+        if (promoId) {
+          try {
+            await adminDb.collection('promos').doc(promoId).update({
+              usedCount: FieldValue.increment(1),
+            });
+          } catch (promoErr) {
+            console.warn('⚠️ [WEBHOOK] Product promo usedCount increment failed:', promoErr.message);
+          }
+        }
+
+        if (process.env.BREVO_API_KEY) {
+          try {
+            const { sendEmail, getProductConfirmationEmailTemplate } = await import('../../lib/brevo');
+            const locale = metadata.locale === 'fr' ? 'fr' : 'en';
+            const { subject, htmlContent, textContent } = getProductConfirmationEmailTemplate({
+              customerName: firstName || 'Customer',
+              productTitle: productTitle || product.title,
+              downloadUrl,
+              locale,
+            });
+            await sendEmail({
+              to: normalizedEmail,
+              subject,
+              htmlContent,
+              textContent,
+            });
+            console.log('✅ [WEBHOOK] Product confirmation email sent to:', normalizedEmail);
+          } catch (emailErr) {
+            console.error('❌ [WEBHOOK] Product email error:', emailErr.message);
+          }
+        }
+
+        return NextResponse.json({ received: true, status: 'success', orderType: 'product' });
+      }
+
+      // ============================================
+      // EVENT REGISTRATION (existing logic)
+      // ============================================
       const {
         eventId,
         ticketId,
@@ -89,7 +155,7 @@ export async function POST(request) {
         promoId,
         campus,
         customFields: customFieldsStr,
-      } = session.metadata || {};
+      } = metadata;
 
       let customFieldsObj = {};
       if (customFieldsStr && typeof customFieldsStr === 'string') {

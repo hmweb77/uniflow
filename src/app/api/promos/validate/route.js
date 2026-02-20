@@ -6,7 +6,7 @@ import { adminDb } from '../../../lib/firebase-admin';
 
 export async function POST(request) {
   try {
-    const { code, eventId } = await request.json();
+    const { code, eventId, productId } = await request.json();
 
     if (!code) {
       return NextResponse.json({ error: 'Promo code is required' }, { status: 400 });
@@ -41,9 +41,21 @@ export async function POST(request) {
       return NextResponse.json({ error: 'This promo code has reached its usage limit' }, { status: 400 });
     }
 
-    // Check event restriction
-    if (promo.eventId && promo.eventId !== eventId) {
-      return NextResponse.json({ error: 'This promo code is not valid for this event' }, { status: 400 });
+    // Event: check event restriction
+    if (eventId !== undefined && eventId !== null) {
+      if (promo.eventId && promo.eventId !== eventId) {
+        return NextResponse.json({ error: 'This promo code is not valid for this event' }, { status: 400 });
+      }
+    }
+
+    // Product: only global promos (no eventId) or product-specific (promo.productId) are valid
+    if (productId !== undefined && productId !== null) {
+      if (promo.eventId && !promo.productId) {
+        return NextResponse.json({ error: 'This promo code is not valid for this product' }, { status: 400 });
+      }
+      if (promo.productId && promo.productId !== productId) {
+        return NextResponse.json({ error: 'This promo code is not valid for this product' }, { status: 400 });
+      }
     }
 
     return NextResponse.json({
