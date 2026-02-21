@@ -4,7 +4,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { generateCSV, downloadCSV, generateXLS, downloadXLS } from '../../lib/utils';
 import Link from 'next/link';
@@ -14,13 +14,15 @@ const PAYMENT_STATUS_EXPORT = ['completed', 'paid', 'free', 'promo_free'];
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [events, setEvents] = useState({});
-  const [allOrders, setAllOrders] = useState([]); // all attendees/orders for CSV export
+  const [products, setProducts] = useState({});
+  const [allOrders, setAllOrders] = useState([]); // attendees + product_orders for CSV export
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('totalSpent');
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedUser, setSelectedUser] = useState(null);
   const [dataSource, setDataSource] = useState('auto'); // 'users', 'attendees', 'auto'
+  const [filterBy, setFilterBy] = useState(''); // '' | 'event:ID' | 'product:ID'
 
   useEffect(() => {
     fetchData();
@@ -28,7 +30,7 @@ export default function UsersPage() {
 
   const fetchData = async () => {
     try {
-      // Fetch all events first (for event names)
+      // Fetch all events (for event names)
       const eventsRef = collection(db, 'events');
       const eventsSnap = await getDocs(eventsRef);
       const eventsMap = {};
@@ -37,13 +39,96 @@ export default function UsersPage() {
       });
       setEvents(eventsMap);
 
-      // Always fetch all orders (attendees) for CSV export with order id, campus, etc.
+      // Fetch all products (for product/bundle names and types)
+      const productsRef = collection(db, 'products');
+      const productsSnap = await getDocs(productsRef);
+      const productsMap = {};
+      productsSnap.docs.forEach((doc) => {
+        productsMap[doc.id] = { id: doc.id, ...doc.data() };
+      });
+      setProducts(productsMap);
+
+      // Fetch attendees and product_orders for export and customer merge
       const attendeesRef = collection(db, 'attendees');
       const attendeesSnap = await getDocs(attendeesRef);
-      const ordersList = attendeesSnap.docs
+      const attendeesList = attendeesSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((a) => PAYMENT_STATUS_EXPORT.includes(a.paymentStatus));
-      setAllOrders(ordersList);
+
+      const productOrdersRef = collection(db, 'product_orders');
+      const productOrdersSnap = await getDocs(productOrdersRef);
+      const productOrdersList = productOrdersSnap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        orderType: 'product',
+      }));
+
+      // Combined orders for CSV/XLS export
+      const eventOrdersForExport = attendeesList.map((o) => ({
+        ...o,
+        orderType: 'event',
+      }));
+      const productOrdersForExport = productOrdersList.map((o) => ({
+        ...o,
+        orderType: 'product',
+      }));
+      setAllOrders([...eventOrdersForExport, ...productOrdersForExport]);
+
+      // Helper: merge product orders into a list of users (by email)
+      const mergeProductOrdersIntoUsers = (userList, asMap = false) => {
+        const byEmail = {};
+        userList.forEach((u) => {
+          const email = (u.email || '').toLowerCase();
+          if (!email) return;
+          byEmail[email] = {
+            ...u,
+            purchases: [...(u.purchases || [])],
+            totalSpent: u.totalSpent || 0,
+            firstPurchase: u.firstPurchase || u.createdAt,
+            lastPurchase: u.lastPurchase || u.createdAt,
+          };
+        });
+        productOrdersList.forEach((order) => {
+          const email = (order.email || '').toLowerCase();
+          if (!email) return;
+          const product = productsMap[order.productId] || {};
+          const amount = order.amountPaid != null ? order.amountPaid : 0;
+          const purchase = {
+            type: 'product',
+            productId: order.productId,
+            productTitle: order.productTitle || product.title || 'Unknown Product',
+            productType: product.type || 'product',
+            amount,
+            date: order.createdAt,
+          };
+          if (!byEmail[email]) {
+            byEmail[email] = {
+              id: order.id,
+              email: order.email,
+              name: order.firstName || order.name,
+              surname: order.lastName || order.surname,
+              purchases: [purchase],
+              totalSpent: amount,
+              firstPurchase: order.createdAt,
+              lastPurchase: order.createdAt,
+            };
+          } else {
+            byEmail[email].purchases.push(purchase);
+            byEmail[email].totalSpent += amount;
+            const orderDate = order.createdAt?.toDate?.() || new Date(order.createdAt);
+            const lastDate = byEmail[email].lastPurchase?.toDate?.() || new Date(byEmail[email].lastPurchase);
+            if (orderDate > lastDate) byEmail[email].lastPurchase = order.createdAt;
+            const firstDate = byEmail[email].firstPurchase?.toDate?.() || new Date(byEmail[email].firstPurchase);
+            if (orderDate < firstDate) byEmail[email].firstPurchase = order.createdAt;
+          }
+        });
+        const result = Object.values(byEmail).map((u) => ({
+          ...u,
+          purchaseCount: u.purchases.length,
+          events: (u.purchases || []).filter((p) => p.eventId).map((p) => p.eventId),
+        }));
+        return asMap ? byEmail : result;
+      };
 
       // Try to fetch from 'users' collection first
       let usersData = [];
@@ -57,6 +142,14 @@ export default function UsersPage() {
           source = 'users';
           usersData = usersSnap.docs.map((doc) => {
             const data = doc.data();
+            const eventIds = data.events || [];
+            const purchases = eventIds.map((eventId) => ({
+              type: 'event',
+              eventId,
+              eventTitle: eventsMap[eventId]?.title || 'Unknown Event',
+              amount: undefined,
+              date: undefined,
+            }));
             return {
               id: doc.id,
               email: data.email,
@@ -64,35 +157,23 @@ export default function UsersPage() {
               surname: data.lastName || data.surname,
               totalSpent: data.totalSpent || 0,
               purchaseCount: data.purchaseCount || 0,
-              events: data.events || [],
+              events: eventIds,
               createdAt: data.createdAt,
               lastPurchase: data.lastPurchase,
-              // Build purchases from events
-              purchases: (data.events || []).map((eventId) => ({
-                eventId,
-                eventTitle: eventsMap[eventId]?.title || 'Unknown Event',
-              })),
+              firstPurchase: data.createdAt,
+              purchases,
             };
           });
+          usersData = mergeProductOrdersIntoUsers(usersData);
         }
       } catch (usersErr) {
         console.log('Users collection not available, falling back to attendees');
       }
 
-      // If no users collection data, build from attendees
+      // If no users collection data, build from attendees + product_orders
       if (usersData.length === 0) {
-        const attendeesRef = collection(db, 'attendees');
-        const attendeesSnap = await getDocs(attendeesRef);
-        const attendees = attendeesSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-
-        // Group attendees by email
         const usersMap = {};
-        attendees.forEach((attendee) => {
-          if (!PAYMENT_STATUS_EXPORT.includes(attendee.paymentStatus)) return;
-
+        attendeesList.forEach((attendee) => {
           const email = attendee.email?.toLowerCase();
           if (!email) return;
 
@@ -109,9 +190,10 @@ export default function UsersPage() {
           }
 
           const event = eventsMap[attendee.eventId];
-          const purchaseAmount = attendee.amountPaid || event?.price || 0;
+          const purchaseAmount = attendee.amountPaid ?? event?.price ?? 0;
 
           usersMap[email].purchases.push({
+            type: 'event',
             eventId: attendee.eventId,
             eventTitle: event?.title || attendee.eventTitle || 'Unknown Event',
             amount: purchaseAmount,
@@ -121,29 +203,22 @@ export default function UsersPage() {
 
           usersMap[email].totalSpent += purchaseAmount;
 
-          // Update name if more recent
           const attendeeDate = attendee.createdAt?.toDate?.() || new Date(attendee.createdAt);
           const lastDate = usersMap[email].lastPurchase?.toDate?.() || new Date(usersMap[email].lastPurchase);
-          
           if (attendeeDate > lastDate) {
             usersMap[email].name = attendee.firstName || attendee.name || usersMap[email].name;
             usersMap[email].surname = attendee.lastName || attendee.surname || usersMap[email].surname;
             usersMap[email].lastPurchase = attendee.createdAt;
           }
-
-          // Track first purchase
           const firstDate = usersMap[email].firstPurchase?.toDate?.() || new Date(usersMap[email].firstPurchase);
           if (attendeeDate < firstDate) {
             usersMap[email].firstPurchase = attendee.createdAt;
           }
         });
 
-        // Convert to array and add purchaseCount
-        usersData = Object.values(usersMap).map((user) => ({
-          ...user,
-          purchaseCount: user.purchases.length,
-          events: user.purchases.map((p) => p.eventId),
-        }));
+        usersData = mergeProductOrdersIntoUsers(
+          Object.values(usersMap).map((u) => ({ ...u, purchaseCount: u.purchases.length }))
+        );
       }
 
       setDataSource(source);
@@ -186,15 +261,35 @@ export default function UsersPage() {
     }
   };
 
+  // Filter options: events and products (for "filter by event or bundle")
+  const filterOptions = [
+    { value: '', label: 'All customers' },
+    ...Object.values(events).map((e) => ({ value: `event:${e.id}`, label: `Event: ${e.title || e.id}` })),
+    ...Object.values(products).map((p) => ({
+      value: `product:${p.id}`,
+      label: `${p.type === 'bundle' ? 'Bundle' : 'Product'}: ${p.title || p.id}`,
+    })),
+  ];
+
   const sortedUsers = [...users]
     .filter((user) => {
-      if (!searchTerm) return true;
-      const search = searchTerm.toLowerCase();
-      return (
-        user.email?.toLowerCase().includes(search) ||
-        user.name?.toLowerCase().includes(search) ||
-        user.surname?.toLowerCase().includes(search)
-      );
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        if (
+          !user.email?.toLowerCase().includes(search) &&
+          !user.name?.toLowerCase().includes(search) &&
+          !user.surname?.toLowerCase().includes(search)
+        )
+          return false;
+      }
+      if (filterBy) {
+        const [type, id] = filterBy.split(':');
+        const hasMatch = (user.purchases || []).some(
+          (p) => (type === 'event' && p.eventId === id) || (type === 'product' && p.productId === id)
+        );
+        if (!hasMatch) return false;
+      }
+      return true;
     })
     .sort((a, b) => {
       let aVal, bVal;
@@ -228,27 +323,33 @@ export default function UsersPage() {
   const handleExportCSV = () => {
     const headers = [
       { key: 'orderId', label: 'Order ID' },
+      { key: 'type', label: 'Type' },
       { key: 'firstName', label: 'First Name' },
       { key: 'lastName', label: 'Last Name' },
       { key: 'email', label: 'Email' },
-      { key: 'course', label: 'Course' },
+      { key: 'courseOrProduct', label: 'Event / Product' },
       { key: 'ticketName', label: 'Ticket Type' },
       { key: 'amountPaid', label: 'Amount Paid (€)' },
       { key: 'campus', label: 'Campus' },
       { key: 'promoCode', label: 'Promo Code' },
       { key: 'paymentStatus', label: 'Payment Status' },
-      { key: 'createdAt', label: 'Registration Date' },
+      { key: 'createdAt', label: 'Date' },
     ];
 
     const data = allOrders.map((order) => {
+      const isProduct = order.orderType === 'product';
       const event = events[order.eventId];
+      const product = products[order.productId];
       return {
         orderId: order.id || '',
+        type: isProduct ? 'Product' : 'Event',
         firstName: order.firstName || order.name || '',
         lastName: order.lastName || order.surname || '',
         email: order.email || '',
-        course: event?.title || order.eventTitle || 'Unknown Event',
-        ticketName: order.ticketName || 'General Admission',
+        courseOrProduct: isProduct
+          ? (order.productTitle || product?.title || 'Unknown Product')
+          : (event?.title || order.eventTitle || 'Unknown Event'),
+        ticketName: isProduct ? (product?.type || '') : (order.ticketName || 'General Admission'),
         amountPaid: (order.amountPaid != null ? order.amountPaid : 0).toFixed(2),
         campus: order.campus || '',
         promoCode: order.promoCode || '',
@@ -264,27 +365,33 @@ export default function UsersPage() {
   const handleExportXLS = () => {
     const headers = [
       { key: 'orderId', label: 'Order ID' },
+      { key: 'type', label: 'Type' },
       { key: 'firstName', label: 'First Name' },
       { key: 'lastName', label: 'Last Name' },
       { key: 'email', label: 'Email' },
-      { key: 'course', label: 'Course' },
+      { key: 'courseOrProduct', label: 'Event / Product' },
       { key: 'ticketName', label: 'Ticket Type' },
       { key: 'amountPaid', label: 'Amount Paid (€)' },
       { key: 'campus', label: 'Campus' },
       { key: 'promoCode', label: 'Promo Code' },
       { key: 'paymentStatus', label: 'Payment Status' },
-      { key: 'createdAt', label: 'Registration Date' },
+      { key: 'createdAt', label: 'Date' },
     ];
 
     const data = allOrders.map((order) => {
+      const isProduct = order.orderType === 'product';
       const event = events[order.eventId];
+      const product = products[order.productId];
       return {
         orderId: order.id || '',
+        type: isProduct ? 'Product' : 'Event',
         firstName: order.firstName || order.name || '',
         lastName: order.lastName || order.surname || '',
         email: order.email || '',
-        course: event?.title || order.eventTitle || 'Unknown Event',
-        ticketName: order.ticketName || 'General Admission',
+        courseOrProduct: isProduct
+          ? (order.productTitle || product?.title || 'Unknown Product')
+          : (event?.title || order.eventTitle || 'Unknown Event'),
+        ticketName: isProduct ? (product?.type || '') : (order.ticketName || 'General Admission'),
         amountPaid: (order.amountPaid != null ? order.amountPaid : 0).toFixed(2),
         campus: order.campus || '',
         promoCode: order.promoCode || '',
@@ -318,9 +425,9 @@ export default function UsersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
           <p className="text-gray-500 mt-1">
-            All users who purchased tickets
+            All users who purchased event tickets or products (e.g. bundles)
             <span className="ml-2 text-xs text-gray-400">
-              (Source: {dataSource === 'users' ? 'users collection' : 'attendees collection'})
+              (Source: {dataSource === 'users' ? 'users collection' : 'attendees + product orders'})
             </span>
           </p>
         </div>
@@ -395,34 +502,52 @@ export default function UsersPage() {
 
       {/* Search & Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search by name or email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-            />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              />
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <select
+                value={filterBy}
+                onChange={(e) => setFilterBy(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none min-w-[200px]"
+              >
+                {filterOptions.map((opt) => (
+                  <option key={opt.value || 'all'} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              >
+                <option value="totalSpent">Sort by: Total Spent</option>
+                <option value="purchases">Sort by: Purchases</option>
+                <option value="name">Sort by: Name</option>
+                <option value="lastPurchase">Sort by: Last Purchase</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                {sortOrder === 'desc' ? '↓' : '↑'}
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-            >
-              <option value="totalSpent">Sort by: Total Spent</option>
-              <option value="purchases">Sort by: Purchases</option>
-              <option value="name">Sort by: Name</option>
-              <option value="lastPurchase">Sort by: Last Purchase</option>
-            </select>
-            <button
-              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              {sortOrder === 'desc' ? '↓' : '↑'}
-            </button>
-          </div>
+          {filterBy && (
+            <p className="text-sm text-gray-500">
+              Showing customers who bought: {filterOptions.find((o) => o.value === filterBy)?.label || filterBy}
+            </p>
+          )}
         </div>
       </div>
 
@@ -491,7 +616,7 @@ export default function UsersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
-                        {user.purchaseCount || user.purchases?.length || 0} event{(user.purchaseCount || user.purchases?.length || 0) !== 1 ? 's' : ''}
+                        {user.purchaseCount || user.purchases?.length || 0} purchase{(user.purchaseCount || user.purchases?.length || 0) !== 1 ? 's' : ''}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -519,7 +644,7 @@ export default function UsersPage() {
           <div className="p-12 text-center text-gray-400">
             <div className="text-6xl mb-4">👥</div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No customers yet</h3>
-            <p>Customers will appear here once they purchase tickets</p>
+            <p>Customers will appear here once they purchase event tickets or products (e.g. bundles)</p>
           </div>
         )}
       </div>
@@ -563,7 +688,7 @@ export default function UsersPage() {
                   <p className="text-2xl font-bold text-gray-900">
                     {selectedUser.purchaseCount || selectedUser.purchases?.length || 0}
                   </p>
-                  <p className="text-sm text-gray-500">Events</p>
+                  <p className="text-sm text-gray-500">Purchases</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4 text-center">
                   <p className="text-2xl font-bold text-gray-900">
@@ -579,34 +704,54 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              {/* Enrolled Events */}
-              <h3 className="font-semibold text-gray-900 mb-4">Enrolled Events</h3>
+              {/* Purchases (Events + Products/Bundles) */}
+              <h3 className="font-semibold text-gray-900 mb-4">Purchases</h3>
               <div className="space-y-3">
                 {(selectedUser.purchases || []).length > 0 ? (
-                  selectedUser.purchases.map((purchase, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                          <span className="text-lg">🎓</span>
+                  selectedUser.purchases.map((purchase, index) => {
+                    const isEvent = purchase.type === 'event' || purchase.eventId;
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-indigo-100">
+                            <span className="text-lg">{isEvent ? '🎓' : '📦'}</span>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-gray-900">
+                                {isEvent ? purchase.eventTitle : purchase.productTitle}
+                              </p>
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-700">
+                                {isEvent ? 'Event' : (purchase.productType === 'bundle' ? 'Bundle' : 'Product')}
+                              </span>
+                            </div>
+                            {isEvent && purchase.ticketName && (
+                              <p className="text-xs text-gray-500">{purchase.ticketName}</p>
+                            )}
+                            {purchase.date && (
+                              <p className="text-sm text-gray-500">{formatDate(purchase.date)}</p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{purchase.eventTitle}</p>
-                          {purchase.ticketName && (
-                            <p className="text-xs text-gray-500">{purchase.ticketName}</p>
+                        <div className="flex items-center gap-2">
+                          {purchase.amount !== undefined && (
+                            <p className="font-semibold text-gray-900">€{purchase.amount.toFixed(2)}</p>
                           )}
-                          {purchase.date && (
-                            <p className="text-sm text-gray-500">{formatDate(purchase.date)}</p>
+                          {isEvent && purchase.eventId && (
+                            <Link
+                              href={`/admin/events/${purchase.eventId}`}
+                              className="text-indigo-600 hover:underline text-sm"
+                            >
+                              View
+                            </Link>
                           )}
                         </div>
                       </div>
-                      {purchase.amount !== undefined && (
-                        <p className="font-semibold text-gray-900">€{purchase.amount.toFixed(2)}</p>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 ) : selectedUser.events?.length > 0 ? (
                   selectedUser.events.map((eventId, index) => (
                     <div
