@@ -107,6 +107,7 @@ export default function UsersPage() {
               email: order.email,
               name: order.firstName || order.name,
               surname: order.lastName || order.surname,
+              campus: order.campus || null,
               purchases: [purchase],
               totalSpent: amount,
               firstPurchase: order.createdAt,
@@ -117,7 +118,11 @@ export default function UsersPage() {
             byEmail[email].totalSpent += amount;
             const orderDate = order.createdAt?.toDate?.() || new Date(order.createdAt);
             const lastDate = byEmail[email].lastPurchase?.toDate?.() || new Date(byEmail[email].lastPurchase);
-            if (orderDate > lastDate) byEmail[email].lastPurchase = order.createdAt;
+            if (orderDate > lastDate) {
+              byEmail[email].lastPurchase = order.createdAt;
+              if (order.campus) byEmail[email].campus = order.campus;
+            }
+            if (order.campus && !byEmail[email].campus) byEmail[email].campus = order.campus;
             const firstDate = byEmail[email].firstPurchase?.toDate?.() || new Date(byEmail[email].firstPurchase);
             if (orderDate < firstDate) byEmail[email].firstPurchase = order.createdAt;
           }
@@ -155,6 +160,7 @@ export default function UsersPage() {
               email: data.email,
               name: data.firstName || data.name,
               surname: data.lastName || data.surname,
+              campus: data.campus || null,
               totalSpent: data.totalSpent || 0,
               purchaseCount: data.purchaseCount || 0,
               events: eventIds,
@@ -182,6 +188,7 @@ export default function UsersPage() {
               email: attendee.email,
               name: attendee.firstName || attendee.name,
               surname: attendee.lastName || attendee.surname,
+              campus: attendee.campus || null,
               purchases: [],
               totalSpent: 0,
               firstPurchase: attendee.createdAt,
@@ -209,7 +216,9 @@ export default function UsersPage() {
             usersMap[email].name = attendee.firstName || attendee.name || usersMap[email].name;
             usersMap[email].surname = attendee.lastName || attendee.surname || usersMap[email].surname;
             usersMap[email].lastPurchase = attendee.createdAt;
+            if (attendee.campus) usersMap[email].campus = attendee.campus;
           }
+          if (attendee.campus && !usersMap[email].campus) usersMap[email].campus = attendee.campus;
           const firstDate = usersMap[email].firstPurchase?.toDate?.() || new Date(usersMap[email].firstPurchase);
           if (attendeeDate < firstDate) {
             usersMap[email].firstPurchase = attendee.createdAt;
@@ -220,6 +229,25 @@ export default function UsersPage() {
           Object.values(usersMap).map((u) => ({ ...u, purchaseCount: u.purchases.length }))
         );
       }
+
+      // Enrich campus from most recent order (attendee or product) that has campus
+      const ordersWithCampus = [
+        ...attendeesList.map((o) => ({ email: (o.email || '').toLowerCase(), campus: o.campus, date: o.createdAt })),
+        ...productOrdersList.map((o) => ({ email: (o.email || '').toLowerCase(), campus: o.campus, date: o.createdAt })),
+      ].filter((o) => o.email && o.campus);
+      ordersWithCampus.sort((a, b) => {
+        const dA = a.date?.toDate ? a.date.toDate() : new Date(a.date || 0);
+        const dB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0);
+        return dB - dA;
+      });
+      const campusByEmail = {};
+      ordersWithCampus.forEach((o) => {
+        if (!campusByEmail[o.email]) campusByEmail[o.email] = o.campus;
+      });
+      usersData = usersData.map((u) => ({
+        ...u,
+        campus: u.campus || campusByEmail[(u.email || '').toLowerCase()] || null,
+      }));
 
       setDataSource(source);
       setUsers(usersData);
@@ -670,6 +698,9 @@ export default function UsersPage() {
                   >
                     {selectedUser.email}
                   </a>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Campus: {selectedUser.campus || '–'}
+                  </p>
                 </div>
               </div>
               <button

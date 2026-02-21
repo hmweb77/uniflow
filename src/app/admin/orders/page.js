@@ -11,11 +11,12 @@ import Link from 'next/link';
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [events, setEvents] = useState({});
+  const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(true);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedEvent, setSelectedEvent] = useState('all');
+  const [filterByEventOrProduct, setFilterByEventOrProduct] = useState('all'); // 'all' | 'event:ID' | 'product:ID'
   const [selectedTicketType, setSelectedTicketType] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -32,7 +33,7 @@ export default function OrdersPage() {
 
   const fetchData = async () => {
     try {
-      // Fetch all events
+      // Fetch events
       const eventsRef = collection(db, 'events');
       const eventsSnap = await getDocs(eventsRef);
       const eventsMap = {};
@@ -41,25 +42,54 @@ export default function OrdersPage() {
       });
       setEvents(eventsMap);
 
-      // Fetch all attendees (orders)
+      // Fetch products (for product/bundle names and types)
+      const productsRef = collection(db, 'products');
+      const productsSnap = await getDocs(productsRef);
+      const productsMap = {};
+      productsSnap.docs.forEach((doc) => {
+        productsMap[doc.id] = { id: doc.id, ...doc.data() };
+      });
+      setProducts(productsMap);
+
+      // Event orders (attendees)
       const attendeesRef = collection(db, 'attendees');
       const attendeesSnap = await getDocs(attendeesRef);
-      const ordersData = attendeesSnap.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }))
-        .filter((a) => ['completed', 'free', 'promo_free'].includes(a.paymentStatus))
+      const eventOrders = attendeesSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((a) => ['completed', 'paid', 'free', 'promo_free'].includes(a.paymentStatus))
         .map((order) => {
           const event = eventsMap[order.eventId];
           return {
             ...order,
-            eventTitle: event?.title || 'Unknown Event',
+            orderType: 'event',
+            eventTitle: event?.title || order.eventTitle || 'Unknown Event',
             eventDate: event?.date,
           };
         });
 
-      setOrders(ordersData);
+      // Product orders (bundles, notes, etc.)
+      const productOrdersRef = collection(db, 'product_orders');
+      const productOrdersSnap = await getDocs(productOrdersRef);
+      const productOrders = productOrdersSnap.docs.map((doc) => {
+        const data = doc.data();
+        const product = productsMap[data.productId] || {};
+        return {
+          id: doc.id,
+          ...data,
+          orderType: 'product',
+          productId: data.productId,
+          productTitle: data.productTitle || product.title || 'Unknown Product',
+          productType: product.type || 'product',
+        };
+      });
+
+      // Unified list: events first, then products, sorted by date desc
+      const combined = [...eventOrders, ...productOrders].sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      setOrders(combined);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -67,20 +97,26 @@ export default function OrdersPage() {
     }
   };
 
-  // Get unique values for filters
-  const eventOptions = useMemo(() => {
-    const uniqueEvents = new Set(orders.map((o) => o.eventId));
-    return Array.from(uniqueEvents)
+  // Filter by event or product/bundle
+  const filterEventProductOptions = useMemo(() => {
+    const eventIds = [...new Set(orders.filter((o) => o.orderType === 'event').map((o) => o.eventId))];
+    const productIds = [...new Set(orders.filter((o) => o.orderType === 'product').map((o) => o.productId))];
+    const eventOpts = eventIds
+      .map((id) => ({ value: `event:${id}`, label: `Event: ${events[id]?.title || id}` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const productOpts = productIds
       .map((id) => ({
-        id,
-        title: events[id]?.title || 'Unknown Event',
+        value: `product:${id}`,
+        label: `${products[id]?.type === 'bundle' ? 'Bundle' : 'Product'}: ${products[id]?.title || id}`,
       }))
-      .sort((a, b) => a.title.localeCompare(b.title));
-  }, [orders, events]);
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return [{ value: 'all', label: 'All orders' }, ...eventOpts, ...productOpts];
+  }, [orders, events, products]);
 
   const ticketTypeOptions = useMemo(() => {
-    const types = new Set(orders.map((o) => o.ticketName || 'General Admission'));
-    return Array.from(types).sort();
+    const fromEvents = new Set(orders.filter((o) => o.orderType === 'event').map((o) => o.ticketName || 'General Admission'));
+    const fromProducts = new Set(orders.filter((o) => o.orderType === 'product').map((o) => (o.productType === 'bundle' ? 'Bundle' : o.productType || 'Product')));
+    return [...Array.from(fromEvents), ...Array.from(fromProducts)].filter(Boolean).sort();
   }, [orders]);
 
   // Filter and sort orders
@@ -98,16 +134,23 @@ export default function OrdersPage() {
       });
     }
 
-    // Event filter
-    if (selectedEvent !== 'all') {
-      result = result.filter((order) => order.eventId === selectedEvent);
+    // Event or product filter
+    if (filterByEventOrProduct !== 'all') {
+      const [type, id] = filterByEventOrProduct.split(':');
+      result = result.filter((order) =>
+        type === 'event' ? order.eventId === id : order.productId === id
+      );
     }
 
-    // Ticket type filter
+    // Ticket type / product type filter
     if (selectedTicketType !== 'all') {
-      result = result.filter(
-        (order) => (order.ticketName || 'General Admission') === selectedTicketType
-      );
+      result = result.filter((order) => {
+        if (order.orderType === 'event') {
+          return (order.ticketName || 'General Admission') === selectedTicketType;
+        }
+        const productTypeLabel = order.productType === 'bundle' ? 'Bundle' : order.productType || 'Product';
+        return productTypeLabel === selectedTicketType;
+      });
     }
 
     // Date range filter
@@ -150,8 +193,8 @@ export default function OrdersPage() {
           bVal = b.amountPaid || 0;
           break;
         case 'event':
-          aVal = a.eventTitle?.toLowerCase() || '';
-          bVal = b.eventTitle?.toLowerCase() || '';
+          aVal = (a.eventTitle || a.productTitle || '').toLowerCase();
+          bVal = (b.eventTitle || b.productTitle || '').toLowerCase();
           break;
         default:
           aVal = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
@@ -164,7 +207,7 @@ export default function OrdersPage() {
     });
 
     return result;
-  }, [orders, searchTerm, selectedEvent, selectedTicketType, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [orders, searchTerm, filterByEventOrProduct, selectedTicketType, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Pagination
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -176,7 +219,7 @@ export default function OrdersPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedEvent, selectedTicketType, dateFrom, dateTo]);
+  }, [searchTerm, filterByEventOrProduct, selectedTicketType, dateFrom, dateTo]);
 
   // Format helpers
   const formatDate = (timestamp) => {
@@ -197,22 +240,24 @@ export default function OrdersPage() {
   const handleExportCSV = () => {
     const headers = [
       { key: 'orderId', label: 'Order ID' },
+      { key: 'type', label: 'Type' },
       { key: 'name', label: 'First Name' },
       { key: 'surname', label: 'Last Name' },
       { key: 'email', label: 'Email' },
-      { key: 'eventTitle', label: 'Event' },
-      { key: 'ticketName', label: 'Ticket Type' },
+      { key: 'eventOrProduct', label: 'Event / Product' },
+      { key: 'ticketOrType', label: 'Ticket / Type' },
       { key: 'amountPaid', label: 'Amount Paid (€)' },
       { key: 'createdAt', label: 'Date' },
     ];
 
     const data = filteredOrders.map((order) => ({
       orderId: getShortOrderId(order.id),
+      type: order.orderType === 'product' ? 'Product' : 'Event',
       name: order.firstName || order.name || '',
       surname: order.lastName || order.surname || '',
       email: order.email || '',
-      eventTitle: order.eventTitle || '',
-      ticketName: order.ticketName || 'General Admission',
+      eventOrProduct: order.orderType === 'product' ? (order.productTitle || '') : (order.eventTitle || ''),
+      ticketOrType: order.orderType === 'product' ? (order.productType === 'bundle' ? 'Bundle' : order.productType || '') : (order.ticketName || 'General Admission'),
       amountPaid: order.amountPaid?.toFixed(2) || '0.00',
       createdAt: formatDate(order.createdAt),
     }));
@@ -224,22 +269,24 @@ export default function OrdersPage() {
   const handleExportXLS = () => {
     const headers = [
       { key: 'orderId', label: 'Order ID' },
+      { key: 'type', label: 'Type' },
       { key: 'name', label: 'First Name' },
       { key: 'surname', label: 'Last Name' },
       { key: 'email', label: 'Email' },
-      { key: 'eventTitle', label: 'Event' },
-      { key: 'ticketName', label: 'Ticket Type' },
+      { key: 'eventOrProduct', label: 'Event / Product' },
+      { key: 'ticketOrType', label: 'Ticket / Type' },
       { key: 'amountPaid', label: 'Amount Paid (€)' },
       { key: 'createdAt', label: 'Date' },
     ];
 
     const data = filteredOrders.map((order) => ({
       orderId: getShortOrderId(order.id),
+      type: order.orderType === 'product' ? 'Product' : 'Event',
       name: order.firstName || order.name || '',
       surname: order.lastName || order.surname || '',
       email: order.email || '',
-      eventTitle: order.eventTitle || '',
-      ticketName: order.ticketName || 'General Admission',
+      eventOrProduct: order.orderType === 'product' ? (order.productTitle || '') : (order.eventTitle || ''),
+      ticketOrType: order.orderType === 'product' ? (order.productType === 'bundle' ? 'Bundle' : order.productType || '') : (order.ticketName || 'General Admission'),
       amountPaid: order.amountPaid?.toFixed(2) || '0.00',
       createdAt: formatDate(order.createdAt),
     }));
@@ -250,23 +297,25 @@ export default function OrdersPage() {
 
   const clearFilters = () => {
     setSearchTerm('');
-    setSelectedEvent('all');
+    setFilterByEventOrProduct('all');
     setSelectedTicketType('all');
     setDateFrom('');
     setDateTo('');
   };
 
   const hasActiveFilters =
-    searchTerm || selectedEvent !== 'all' || selectedTicketType !== 'all' || dateFrom || dateTo;
+    searchTerm || filterByEventOrProduct !== 'all' || selectedTicketType !== 'all' || dateFrom || dateTo;
 
   // Calculate summary stats for filtered results
   const filteredStats = useMemo(() => {
     const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.amountPaid || 0), 0);
-    const uniqueEvents = new Set(filteredOrders.map((o) => o.eventId)).size;
+    const uniqueEvents = new Set(filteredOrders.filter((o) => o.orderType === 'event').map((o) => o.eventId)).size;
+    const uniqueProducts = new Set(filteredOrders.filter((o) => o.orderType === 'product').map((o) => o.productId)).size;
     return {
       count: filteredOrders.length,
       revenue: totalRevenue,
       events: uniqueEvents,
+      products: uniqueProducts,
     };
   }, [filteredOrders]);
 
@@ -336,8 +385,8 @@ export default function OrdersPage() {
               <span className="text-xl">📅</span>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Events</p>
-              <p className="text-xl font-bold text-gray-900">{filteredStats.events}</p>
+              <p className="text-sm text-gray-500">Events / Products</p>
+              <p className="text-xl font-bold text-gray-900">{filteredStats.events} events, {filteredStats.products} products</p>
             </div>
           </div>
         </div>
@@ -362,30 +411,29 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          {/* Event Filter */}
-          <div className="w-full lg:w-auto">
+          {/* Event or Product/Bundle Filter */}
+          <div className="w-full lg:w-auto min-w-[200px]">
             <select
-              value={selectedEvent}
-              onChange={(e) => setSelectedEvent(e.target.value)}
+              value={filterByEventOrProduct}
+              onChange={(e) => setFilterByEventOrProduct(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
             >
-              <option value="all">All Events</option>
-              {eventOptions.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.title}
+              {filterEventProductOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Ticket Type Filter */}
+          {/* Ticket / Type Filter */}
           <div className="w-full lg:w-auto">
             <select
               value={selectedTicketType}
               onChange={(e) => setSelectedTicketType(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
             >
-              <option value="all">All Ticket Types</option>
+              <option value="all">All types</option>
               {ticketTypeOptions.map((type) => (
                 <option key={type} value={type}>
                   {type}
@@ -462,7 +510,10 @@ export default function OrdersPage() {
                       Order ID
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Event
+                      Type
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Event / Product
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Name
@@ -471,25 +522,36 @@ export default function OrdersPage() {
                       Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Paid / Tickets
+                      Paid
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {paginatedOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50">
+                    <tr key={`${order.orderType}-${order.id}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="font-mono text-indigo-600 font-medium">
                           {getShortOrderId(order.id)}
                         </span>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${order.orderType === 'product' ? 'bg-amber-50 text-amber-700' : 'bg-indigo-50 text-indigo-700'}`}>
+                          {order.orderType === 'product' ? (order.productType === 'bundle' ? '📦 Bundle' : 'Product') : '🎫 Event'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4">
-                        <Link
-                          href={`/admin/events/${order.eventId}`}
-                          className="text-gray-900 hover:text-indigo-600 font-medium truncate block max-w-xs"
-                        >
-                          {order.eventTitle}
-                        </Link>
+                        {order.orderType === 'event' ? (
+                          <Link
+                            href={`/admin/events/${order.eventId}`}
+                            className="text-gray-900 hover:text-indigo-600 font-medium truncate block max-w-xs"
+                          >
+                            {order.eventTitle}
+                          </Link>
+                        ) : (
+                          <span className="text-gray-900 font-medium truncate block max-w-xs">
+                            {order.productTitle}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div>
@@ -508,14 +570,9 @@ export default function OrdersPage() {
                         {formatDate(order.createdAt)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <span className="font-semibold text-gray-900">
-                            €{order.amountPaid?.toFixed(2) || '0.00'}
-                          </span>
-                          <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full">
-                            🎫 1
-                          </span>
-                        </div>
+                        <span className="font-semibold text-gray-900">
+                          €{order.amountPaid?.toFixed(2) ?? '0.00'}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -573,7 +630,7 @@ export default function OrdersPage() {
             <p>
               {hasActiveFilters
                 ? 'Try adjusting your filters'
-                : 'Orders will appear here when customers purchase tickets'}
+                : 'Orders will appear here when customers purchase event tickets or products (e.g. bundles)'}
             </p>
             {hasActiveFilters && (
               <button
