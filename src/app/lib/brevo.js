@@ -184,7 +184,7 @@ export function getConfirmationEmailTemplate({
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
   
   <!-- Header -->
-  <div style="background-color: #1a1a2e; padding: 32px 30px; text-align: center;">
+  <div style="background-color: #1d55ea; padding: 32px 30px; text-align: center;">
     <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.3px;">
       ${isEnglish ? 'Registration Confirmed' : 'Inscription Confirmee'}
     </h1>
@@ -235,7 +235,7 @@ export function getConfirmationEmailTemplate({
       <p style="color: #48485c; margin: 0 0 12px 0; font-size: 14px;">
         ${isEnglish ? 'Your class access link:' : "Votre lien d'acces au cours :"}
       </p>
-      <a href="${meetingLink}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+      <a href="${meetingLink}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
         ${isEnglish ? 'Join Class' : 'Rejoindre le cours'}
       </a>
       <p style="color: #6e6e80; margin: 12px 0 0 0; font-size: 12px;">
@@ -325,7 +325,7 @@ export function getProductConfirmationEmailTemplate({
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
   
-  <div style="background-color: #1a1a2e; padding: 32px 30px; text-align: center;">
+  <div style="background-color: #1d55ea; padding: 32px 30px; text-align: center;">
     <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">
       ${isEnglish ? 'Purchase Confirmed' : 'Achat Confirme'}
     </h1>
@@ -348,7 +348,7 @@ export function getProductConfirmationEmailTemplate({
       <p style="color: #48485c; margin: 0 0 12px 0; font-size: 14px;">
         ${isEnglish ? 'Access your content:' : 'Accédez à votre contenu :'}
       </p>
-      <a href="${downloadUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+      <a href="${downloadUrl}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
         ${isEnglish ? 'Access Content' : 'Accéder au contenu'}
       </a>
       <p style="color: #6e6e80; margin: 12px 0 0 0; font-size: 12px;">
@@ -408,7 +408,7 @@ export function getThankYouEmailTemplate({
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
   
-  <div style="background-color: #1a1a2e; padding: 32px 30px; text-align: center;">
+  <div style="background-color: #1d55ea; padding: 32px 30px; text-align: center;">
     <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">
       ${isEnglish ? 'Thank You for Attending' : 'Merci pour votre participation'}
     </h1>
@@ -437,7 +437,7 @@ export function getThankYouEmailTemplate({
           : 'Aidez-nous a nous ameliorer en partageant votre experience.'
         }
       </p>
-      <a href="${feedbackFormUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+      <a href="${feedbackFormUrl}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
         ${isEnglish ? 'Share Feedback' : 'Donner mon avis'}
       </a>
     </div>
@@ -486,7 +486,7 @@ export function get24HourReminderTemplate({
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
   
-  <div style="background-color: #1a1a2e; padding: 32px 30px; text-align: center;">
+  <div style="background-color: #1d55ea; padding: 32px 30px; text-align: center;">
     <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">
       ${isEnglish ? 'Event Reminder' : 'Rappel'}
     </h1>
@@ -512,7 +512,7 @@ export function get24HourReminderTemplate({
     
     ${meetingLink ? `
     <div style="text-align: center; margin: 0 0 24px 0;">
-      <a href="${meetingLink}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+      <a href="${meetingLink}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
         ${isEnglish ? 'Save Your Class Link' : 'Gardez votre lien'}
       </a>
     </div>
@@ -522,6 +522,82 @@ export function get24HourReminderTemplate({
       ${isEnglish
         ? 'Make sure to be ready a few minutes before the class starts.'
         : "Assurez-vous d'etre pret quelques minutes avant le debut du cours."
+      }
+    </p>
+  </div>
+  
+  <div style="text-align: center; padding: 24px; color: #6e6e80; font-size: 12px;">
+    <p style="margin: 0;">Uniflow</p>
+  </div>
+</body>
+</html>
+  `;
+
+  return { subject, htmlContent };
+}
+
+/**
+ * 1-hour reminder template - professional, no emojis
+ */
+export function get1HourReminderTemplate({
+  customerName = 'Student',
+  eventTitle,
+  eventDate,
+  eventTime,
+  meetingLink,
+  locale = 'en',
+}) {
+  const isEnglish = locale === 'en';
+
+  const subject = isEnglish
+    ? `Reminder: ${eventTitle} starts in 1 hour`
+    : `Rappel : ${eventTitle} dans 1 heure`;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
+  
+  <div style="background-color: #1d55ea; padding: 32px 30px; text-align: center;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600;">
+      ${isEnglish ? 'Event Reminder' : 'Rappel'}
+    </h1>
+  </div>
+  
+  <div style="background: #ffffff; padding: 36px 30px;">
+    <p style="font-size: 16px; margin: 0 0 20px 0;">
+      ${isEnglish ? `Hello ${customerName},` : `Bonjour ${customerName},`}
+    </p>
+    
+    <p style="font-size: 15px; color: #48485c; margin: 0 0 24px 0;">
+      ${isEnglish
+        ? `This is a reminder that <strong>${eventTitle}</strong> starts in 1 hour.`
+        : `Rappel : <strong>${eventTitle}</strong> commence dans 1 heure.`
+      }
+    </p>
+    
+    <div style="background: #f5f5f7; border-radius: 8px; padding: 20px; margin: 0 0 24px 0; border: 1px solid #e8e8ed;">
+      <p style="margin: 0; font-size: 15px; color: #1a1a2e; font-weight: 600;">
+        ${eventDate} ${isEnglish ? 'at' : 'a'} ${eventTime}
+      </p>
+    </div>
+    
+    ${meetingLink ? `
+    <div style="text-align: center; margin: 0 0 24px 0;">
+      <a href="${meetingLink}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+        ${isEnglish ? 'Join Now' : 'Rejoindre'}
+      </a>
+    </div>
+    ` : ''}
+    
+    <p style="font-size: 14px; color: #6e6e80;">
+      ${isEnglish
+        ? 'See you in a moment.'
+        : 'A tout de suite.'
       }
     </p>
   </div>

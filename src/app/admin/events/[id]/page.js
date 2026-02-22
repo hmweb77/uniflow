@@ -21,6 +21,7 @@ export default function EventDetailPage() {
   const [emailBody, setEmailBody] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   const [thankYouSending, setThankYouSending] = useState(false);
+  const [reminderSending, setReminderSending] = useState(null); // '24h' | '1h' | null
   const [ticketFilter, setTicketFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('date');
@@ -194,12 +195,37 @@ export default function EventDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
-      alert(`Sent ${data.sent} thank-you emails (${data.total} attendees).`);
+      alert(`Sent ${data.sent} thank-you emails.`);
       setEvent((prev) => prev ? { ...prev, thankYouSent: true } : null);
     } catch (err) {
       alert('Failed: ' + err.message);
     } finally {
       setThankYouSending(false);
+    }
+  };
+
+  const handleSendReminder = async (reminderType) => {
+    const label = reminderType === '24h' ? '24h' : '1h';
+    const count = attendees.length;
+    if (!confirm(`Send ${label} reminder to all ${count} attendee${count !== 1 ? 's' : ''}?`)) return;
+    setReminderSending(reminderType);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/email/reminder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ eventId, reminderType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      alert(`Sent ${data.sent} ${label} reminder email${data.sent !== 1 ? 's' : ''}.${data.failed > 0 ? ` ${data.failed} failed.` : ''}`);
+    } catch (err) {
+      alert('Failed: ' + err.message);
+    } finally {
+      setReminderSending(null);
     }
   };
 
@@ -533,6 +559,20 @@ export default function EventDetailPage() {
                 className="px-4 py-2 text-sm font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 disabled:opacity-50"
               >
                 {thankYouSending ? 'Sending...' : event?.thankYouSent ? 'Thank-you sent' : '📬 Send thank-you email'}
+              </button>
+              <button
+                onClick={() => handleSendReminder('24h')}
+                disabled={attendees.length === 0 || reminderSending !== null}
+                className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-50"
+              >
+                {reminderSending === '24h' ? 'Sending...' : '⏰ Send 24h Reminder'}
+              </button>
+              <button
+                onClick={() => handleSendReminder('1h')}
+                disabled={attendees.length === 0 || reminderSending !== null}
+                className="px-4 py-2 text-sm font-medium text-teal-600 bg-teal-50 rounded-lg hover:bg-teal-100 disabled:opacity-50"
+              >
+                {reminderSending === '1h' ? 'Sending...' : '⏰ Send 1h Reminder'}
               </button>
               <button
                 onClick={handleExportCSV}
