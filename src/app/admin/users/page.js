@@ -4,7 +4,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { generateCSV, downloadCSV, generateXLS, downloadXLS } from '../../lib/utils';
 import Link from 'next/link';
@@ -23,6 +23,11 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [dataSource, setDataSource] = useState('auto'); // 'users', 'attendees', 'auto'
   const [filterBy, setFilterBy] = useState(''); // '' | 'event:ID' | 'product:ID'
+  const [filterCampus, setFilterCampus] = useState(''); // '' | campus id
+  const [campusesList, setCampusesList] = useState([]);
+  const [editingEmailFor, setEditingEmailFor] = useState(null); // user id or email when editing
+  const [editEmailValue, setEditEmailValue] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -47,6 +52,12 @@ export default function UsersPage() {
         productsMap[doc.id] = { id: doc.id, ...doc.data() };
       });
       setProducts(productsMap);
+
+      // Fetch campuses (for filter)
+      const campusesRef = collection(db, 'campuses');
+      const campusesSnap = await getDocs(campusesRef).catch(() => ({ docs: [] }));
+      const campusesData = campusesSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setCampusesList(campusesData);
 
       // Fetch attendees and product_orders for export and customer merge
       const attendeesRef = collection(db, 'attendees');
@@ -289,6 +300,44 @@ export default function UsersPage() {
     }
   };
 
+  const userEditKey = (user) => user.id || user.email || '';
+
+  const handleStartEditEmail = (user) => {
+    setEditingEmailFor(userEditKey(user));
+    setEditEmailValue(user.email || '');
+  };
+
+  const handleCancelEditEmail = () => {
+    setEditingEmailFor(null);
+    setEditEmailValue('');
+  };
+
+  const handleConfirmEmailEdit = async (user) => {
+    const newEmail = (editEmailValue || '').trim().toLowerCase();
+    if (!newEmail) return;
+    if (newEmail === (user.email || '').toLowerCase()) {
+      handleCancelEditEmail();
+      return;
+    }
+    if (!user.id) {
+      alert('Cannot edit email: this customer is built from orders only (no user record).');
+      return;
+    }
+    setSavingEmail(true);
+    try {
+      await updateDoc(doc(db, 'users', user.id), { email: newEmail });
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, email: newEmail } : u)));
+      if (selectedUser?.id === user.id) setSelectedUser((s) => (s ? { ...s, email: newEmail } : null));
+      setEditingEmailFor(null);
+      setEditEmailValue('');
+    } catch (err) {
+      console.error('Error updating email:', err);
+      alert('Failed to update email. Please try again.');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   // Filter options: events and products (for "filter by event or bundle")
   const filterOptions = [
     { value: '', label: 'All customers' },
@@ -316,6 +365,12 @@ export default function UsersPage() {
           (p) => (type === 'event' && p.eventId === id) || (type === 'product' && p.productId === id)
         );
         if (!hasMatch) return false;
+      }
+      if (filterCampus) {
+        const selectedCampus = campusesList.find((c) => c.id === filterCampus);
+        const userCampus = user.campus || '';
+        const match = userCampus === filterCampus || (selectedCampus && userCampus === selectedCampus.name);
+        if (!match) return false;
       }
       return true;
     })
@@ -541,7 +596,20 @@ export default function UsersPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               />
             </div>
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex flex-wrap gap-2 flex-shrink-0">
+              <select
+                value={filterCampus}
+                onChange={(e) => setFilterCampus(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none min-w-[140px]"
+                aria-label="Filter by campus"
+              >
+                <option value="">All campuses</option>
+                {campusesList.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || c.id}
+                  </option>
+                ))}
+              </select>
               <select
                 value={filterBy}
                 onChange={(e) => setFilterBy(e.target.value)}
@@ -571,9 +639,12 @@ export default function UsersPage() {
               </button>
             </div>
           </div>
-          {filterBy && (
+          {(filterBy || filterCampus) && (
             <p className="text-sm text-gray-500">
-              Showing customers who bought: {filterOptions.find((o) => o.value === filterBy)?.label || filterBy}
+              {[
+                filterCampus && `Campus: ${campusesList.find((c) => c.id === filterCampus)?.name || filterCampus}`,
+                filterBy && `Bought: ${filterOptions.find((o) => o.value === filterBy)?.label || filterBy}`,
+              ].filter(Boolean).join(' · ')}
             </p>
           )}
         </div>
@@ -613,6 +684,9 @@ export default function UsersPage() {
                   >
                     Last Purchase {sortBy === 'lastPurchase' && (sortOrder === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                    Campus
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -634,13 +708,63 @@ export default function UsersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <a
-                        href={`mailto:${user.email}`}
-                        className="text-indigo-600 hover:underline"
-                      >
-                        {user.email}
-                      </a>
+                    <td className="px-6 py-4">
+                      {editingEmailFor === userEditKey(user) ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="email"
+                            value={editEmailValue}
+                            onChange={(e) => setEditEmailValue(e.target.value)}
+                            className="flex-1 min-w-[120px] max-w-[220px] px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                            placeholder="email@example.com"
+                            autoFocus
+                            disabled={savingEmail}
+                          />
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmEmailEdit(user)}
+                              disabled={savingEmail || !editEmailValue.trim()}
+                              className="p-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                              title="Confirm"
+                            >
+                              {savingEmail ? (
+                                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <span className="text-sm">✓</span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelEditEmail}
+                              disabled={savingEmail}
+                              className="p-1.5 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                              title="Cancel"
+                            >
+                              <span className="text-sm">✕</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <a
+                            href={`mailto:${user.email}`}
+                            className="text-indigo-600 hover:underline truncate max-w-[200px] sm:max-w-none"
+                          >
+                            {user.email}
+                          </a>
+                          {user.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditEmail(user)}
+                              className="flex-shrink-0 p-1.5 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors"
+                              title="Edit email"
+                            >
+                              <span className="text-xs">✎</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
@@ -654,6 +778,9 @@ export default function UsersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(user.lastPurchase)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
+                      {campusesList.find((c) => c.id === user.campus || c.name === user.campus)?.name || user.campus || '–'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
