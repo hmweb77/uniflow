@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { adminDb } from '../../lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { sendEmail, getConfirmationEmailTemplate, addContactToBrevo } from '../../lib/brevo';
+import { sendEmail, getConfirmationEmailTemplate, getCartConfirmationEmailTemplate, addContactToBrevo } from '../../lib/brevo';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -59,6 +59,243 @@ export async function POST(request) {
 
     try {
       const metadata = session.metadata || {};
+
+      // ============================================
+      // CART PURCHASE (multi-item checkout)
+      // ============================================
+      if (metadata.orderType === 'cart') {
+        const { firstName, lastName, email, promoCode, promoId, campus, cartItemsJson, locale: cartLocale } = metadata;
+        const normalizedEmail = (email || '').toLowerCase().trim();
+
+        if (!normalizedEmail) {
+          console.error('❌ [WEBHOOK] Cart checkout missing email');
+          return NextResponse.json({ error: 'Missing email' }, { status: 400 });
+        }
+
+        // Idempotency check
+        const existingCartOrder = await adminDb
+          .collection('product_orders')
+          .where('stripeSessionId', '==', session.id)
+          .limit(1)
+          .get();
+        if (!existingCartOrder.empty) {
+          console.log('⚠️ [WEBHOOK] Cart order already processed:', session.id);
+          return NextResponse.json({ received: true, status: 'duplicate' });
+        }
+
+        // Parse cart items from metadata
+        let cartItems = [];
+        try {
+          cartItems = JSON.parse(cartItemsJson || '[]');
+        } catch { cartItems = []; }
+
+        const now = new Date();
+        const amountPerItem = cartItems.length > 0 ? (session.amount_total / 100) / cartItems.length : 0;
+
+        for (const item of cartItems) {
+          if (item.type === 'product') {
+            await adminDb.collection('product_orders').add({
+              productId: item.id,
+              productTitle: item.title,
+              firstName: firstName || '',
+              lastName: lastName || '',
+              email: normalizedEmail,
+              amountPaid: Math.round(amountPerItem * 100) / 100,
+              currency: session.currency || 'eur',
+              paymentStatus: 'completed',
+              stripeSessionId: session.id,
+              stripePaymentIntent: session.payment_intent,
+              campus: campus || null,
+              promoCode: promoCode || null,
+              orderSource: 'cart',
+              createdAt: now,
+            });
+
+            try {
+              await adminDb.collection('products').doc(item.id).update({
+                purchaseCount: FieldValue.increment(1),
+                totalRevenue: FieldValue.increment(Math.round(amountPerItem * 100) / 100),
+              });
+            } catch (e) { console.warn('⚠️ [WEBHOOK] Product stats update failed:', e.message); }
+
+          } else if (item.type === 'event') {
+            await adminDb.collection('attendees').add({
+              eventId: item.id,
+              eventTitle: item.title,
+              firstName: firstName || '',
+              lastName: lastName || '',
+              name: firstName || '',
+              surname: lastName || '',
+              email: normalizedEmail,
+              paymentStatus: 'completed',
+              stripeSessionId: session.id,
+              stripePaymentIntent: session.payment_intent,
+              amountPaid: Math.round(amountPerItem * 100) / 100,
+              currency: session.currency || 'eur',
+              ticketId: item.ticketId || 'default',
+              ticketName: item.ticketName || 'General Admission',
+              campus: campus || null,
+              promoCode: promoCode || null,
+              orderSource: 'cart',
+              createdAt: now,
+              stripeEventId: event.id,
+              processedAt: now,
+            });
+
+            try {
+              await adminDb.collection('events').doc(item.id).update({
+                attendeeCount: FieldValue.increment(1),
+                totalRevenue: FieldValue.increment(Math.round(amountPerItem * 100) / 100),
+              });
+            } catch (e) { console.warn('⚠️ [WEBHOOK] Event stats update failed:', e.message); }
+          }
+        }
+
+        // Update/create user
+        try {
+          const existingUserQuery = await adminDb
+            .collection('users')
+            .where('email', '==', normalizedEmail)
+            .limit(1)
+            .get();
+
+          const eventIds = cartItems.filter((i) => i.type === 'event').map((i) => i.id);
+
+          if (existingUserQuery.empty) {
+            await adminDb.collection('users').add({
+              email: normalizedEmail,
+              firstName: firstName || '',
+              lastName: lastName || '',
+              name: firstName || '',
+              surname: lastName || '',
+              createdAt: now,
+              updatedAt: now,
+              totalSpent: session.amount_total / 100,
+              purchaseCount: cartItems.length,
+              events: eventIds,
+              lastPurchase: now,
+            });
+          } else {
+            const userDoc = existingUserQuery.docs[0];
+            const existingData = userDoc.data();
+            const updatedEvents = [...(existingData.events || [])];
+            eventIds.forEach((id) => { if (!updatedEvents.includes(id)) updatedEvents.push(id); });
+            await userDoc.ref.update({
+              updatedAt: now,
+              totalSpent: (existingData.totalSpent || 0) + (session.amount_total / 100),
+              purchaseCount: (existingData.purchaseCount || 0) + cartItems.length,
+              events: updatedEvents,
+              lastPurchase: now,
+            });
+          }
+        } catch (userErr) {
+          console.warn('⚠️ [WEBHOOK] Cart user update failed:', userErr.message);
+        }
+
+        if (promoId) {
+          try {
+            await adminDb.collection('promos').doc(promoId).update({ usedCount: FieldValue.increment(1) });
+          } catch {}
+        }
+
+        if (process.env.BREVO_API_KEY) {
+          try {
+            // Enrich cart items with access links (meeting links for events, download URLs for products)
+            const enrichedItems = [];
+            for (const item of cartItems) {
+              const enriched = { ...item };
+              if (item.type === 'event') {
+                try {
+                  const eventDoc = await adminDb.collection('events').doc(item.id).get();
+                  if (eventDoc.exists) {
+                    const eventData = eventDoc.data();
+                    enriched.meetingLink = eventData.meetingLink || null;
+                    if (eventData.date) {
+                      const d = eventData.date?.toDate ? eventData.date.toDate() : new Date(eventData.date);
+                      const loc = cartLocale === 'fr' ? 'fr-FR' : 'en-GB';
+                      enriched.eventDate = d.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+                    }
+                  }
+                } catch {}
+              } else if (item.type === 'product' && !item.downloadUrl) {
+                try {
+                  const prodDoc = await adminDb.collection('products').doc(item.id).get();
+                  if (prodDoc.exists) {
+                    enriched.downloadUrl = prodDoc.data().downloadUrl || null;
+                  }
+                } catch {}
+              }
+              enrichedItems.push(enriched);
+            }
+
+            // Fetch recommendations based on purchased category tags
+            let recommendations = [];
+            const categoryTag = metadata.categoryFilter || '';
+            try {
+              // Get related products from purchased items
+              const purchasedIds = cartItems.map((i) => i.id);
+              const relatedIds = new Set();
+
+              for (const item of cartItems) {
+                const col = item.type === 'event' ? 'events' : 'products';
+                try {
+                  const doc = await adminDb.collection(col).doc(item.id).get();
+                  if (doc.exists) {
+                    const data = doc.data();
+                    (data.relatedProductIds || []).forEach((id) => {
+                      if (!purchasedIds.includes(id)) relatedIds.add(id);
+                    });
+                  }
+                } catch {}
+              }
+
+              // Fetch up to 3 recommendation docs
+              const recIds = [...relatedIds].slice(0, 3);
+              for (const recId of recIds) {
+                // Try products first, then events
+                let recDoc = await adminDb.collection('products').doc(recId).get();
+                if (recDoc.exists) {
+                  const d = recDoc.data();
+                  if (d.status === 'published') {
+                    recommendations.push({ title: d.title, slug: d.slug, price: d.price, type: 'product' });
+                  }
+                } else {
+                  recDoc = await adminDb.collection('events').doc(recId).get();
+                  if (recDoc.exists) {
+                    const d = recDoc.data();
+                    recommendations.push({ title: d.title, slug: d.slug, price: d.price, type: 'event' });
+                  }
+                }
+              }
+            } catch (recErr) {
+              console.warn('⚠️ [WEBHOOK] Recommendation fetch error:', recErr.message);
+            }
+
+            const discountPct = parseInt(metadata.discountPercent || '0', 10);
+            const totalPaid = session.amount_total / 100;
+            const originalTotal = discountPct > 0 ? totalPaid / (1 - discountPct / 100) : totalPaid;
+            const savings = originalTotal - totalPaid;
+
+            const { subject, htmlContent, textContent } = getCartConfirmationEmailTemplate({
+              customerName: firstName || 'Customer',
+              items: enrichedItems,
+              totalPaid,
+              discountPercent: discountPct,
+              savings,
+              recommendations,
+              categoryFilter: categoryTag,
+              locale: cartLocale === 'fr' ? 'fr' : 'en',
+            });
+            await sendEmail({ to: normalizedEmail, subject, htmlContent, textContent });
+            console.log('✅ [WEBHOOK] Cart confirmation email sent');
+          } catch (emailErr) {
+            console.error('❌ [WEBHOOK] Cart email error:', emailErr.message);
+          }
+        }
+
+        console.log('🎉 [WEBHOOK] Cart order processed:', cartItems.length, 'items');
+        return NextResponse.json({ received: true, status: 'success', orderType: 'cart' });
+      }
 
       // ============================================
       // PRODUCT PURCHASE (digital product)

@@ -4,8 +4,9 @@
 
 import PublicLayout from '@/components/layout/PublicLayout';
 import HeroSection from '@/components/landing/HeroSection';
+import StatsSection from '@/components/landing/StatsSection';
+import SubjectsSection from '@/components/landing/SubjectsSection';
 import FeaturesSection from '@/components/landing/FeaturesSection';
-import HowItWorksSection from '@/components/landing/HowItWorksSection';
 import UpcomingEventsSection from '@/components/landing/UpcomingEventsSection';
 import TestimonialsSection from '@/components/landing/TestimonialsSection';
 import FAQSection from '@/components/landing/FAQSection';
@@ -15,9 +16,10 @@ export default function LandingPage() {
   return (
     <PublicLayout>
       <HeroSection />
-      <FeaturesSection />
-      <HowItWorksSection />
+      <StatsSection />
+      <SubjectsSection />
       <UpcomingEventsSection />
+      <FeaturesSection />
       <TestimonialsSection />
       <FAQSection />
       <CTASection />

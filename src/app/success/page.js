@@ -7,12 +7,15 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useCart } from '@/contexts/CartContext';
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const { locale, setLocale, t } = useLocale();
+  const { clearCart } = useCart();
   const [eventId, setEventId] = useState(null);
   const [productId, setProductId] = useState(null);
+  const [isCart, setIsCart] = useState(false);
   const [showCalendarOptions, setShowCalendarOptions] = useState(false);
   const categoryId = searchParams.get('category');
   const categoryName = searchParams.get('categoryName') ? decodeURIComponent(searchParams.get('categoryName')) : null;
@@ -25,10 +28,15 @@ function SuccessContent() {
     const lang = searchParams.get('lang');
     const event = searchParams.get('event');
     const product = searchParams.get('product');
+    const cart = searchParams.get('cart');
     if (lang && (lang === 'en' || lang === 'fr')) setLocale(lang);
     if (event) setEventId(event);
     if (product) setProductId(product);
-  }, [searchParams, setLocale]);
+    if (cart === 'true') {
+      setIsCart(true);
+      clearCart();
+    }
+  }, [searchParams, setLocale, clearCart]);
 
   return (
     <div
@@ -70,22 +78,28 @@ function SuccessContent() {
               </svg>
             </div>
             <h1 style={{ color: '#ffffff', margin: 0, fontSize: '22px', fontWeight: 600 }}>
-              {isProduct
-                ? (locale === 'fr' ? 'Achat confirme' : 'Purchase Confirmed')
-                : (locale === 'fr' ? 'Inscription confirmee' : 'Registration Confirmed')}
+              {isCart
+                ? (locale === 'fr' ? 'Commande confirmée' : 'Order Confirmed')
+                : isProduct
+                  ? (locale === 'fr' ? 'Achat confirme' : 'Purchase Confirmed')
+                  : (locale === 'fr' ? 'Inscription confirmee' : 'Registration Confirmed')}
             </h1>
           </div>
 
           {/* Body */}
           <div style={{ padding: '32px 24px' }}>
             <p style={{ color: '#48485c', fontSize: '15px', textAlign: 'center', margin: '0 0 24px 0', lineHeight: '1.6' }}>
-              {isProduct
+              {isCart
                 ? (locale === 'fr'
-                  ? "Merci pour votre achat. Vous recevrez un email de confirmation avec le lien d'accès au contenu."
-                  : 'Thank you for your purchase. You will receive a confirmation email with your content access link.')
-                : (locale === 'fr'
-                  ? 'Merci pour votre inscription. Vous recevrez un email de confirmation avec les details de votre cours et le lien d\'acces.'
-                  : 'Thank you for registering. You will receive a confirmation email with the event details and your access link.')}
+                  ? "Merci pour votre commande. Vous recevrez un email de confirmation avec les liens d'accès pour chaque article."
+                  : 'Thank you for your order. You will receive a confirmation email with access links for each item.')
+                : isProduct
+                  ? (locale === 'fr'
+                    ? "Merci pour votre achat. Vous recevrez un email de confirmation avec le lien d'accès au contenu."
+                    : 'Thank you for your purchase. You will receive a confirmation email with your content access link.')
+                  : (locale === 'fr'
+                    ? 'Merci pour votre inscription. Vous recevrez un email de confirmation avec les details de votre cours et le lien d\'acces.'
+                    : 'Thank you for registering. You will receive a confirmation email with the event details and your access link.')}
             </p>
 
             {/* Spam Notice */}

@@ -17,6 +17,7 @@ const navigation = [
   { name: 'Campuses', href: '/admin/campuses', icon: 'M' },
   { name: 'Promos', href: '/admin/promos', icon: 'P' },
   { name: 'Products', href: '/admin/products', icon: 'R' },
+  { name: 'Settings', href: '/admin/settings', icon: 'S' },
 ];
 
 export default function AdminLayout({ children }) {

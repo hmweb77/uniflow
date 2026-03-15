@@ -338,6 +338,13 @@ body {
   background-clip: text;
 }
 
+.hero-gradient-text {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #6ee7b7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 /* Animate */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(16px); }

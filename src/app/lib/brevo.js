@@ -461,6 +461,197 @@ export function getThankYouEmailTemplate({
 }
 
 /**
+ * Cart confirmation email template - lists all purchased items with access links
+ * Includes "Your next classes" recommendations based on purchased category
+ */
+export function getCartConfirmationEmailTemplate({
+  customerName = 'Student',
+  items = [],
+  totalPaid = 0,
+  discountPercent = 0,
+  savings = 0,
+  recommendations = [],
+  categoryFilter = '',
+  locale = 'en',
+}) {
+  const isEnglish = locale === 'en';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://uniflow.com';
+
+  const subject = isEnglish
+    ? `Order confirmed — ${items.length} item${items.length > 1 ? 's' : ''}`
+    : `Commande confirmee — ${items.length} article${items.length > 1 ? 's' : ''}`;
+
+  // Build items list HTML
+  const itemsHtml = items.map((item) => {
+    const accessLink = item.type === 'event' && item.meetingLink
+      ? `<a href="${item.meetingLink}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 6px 16px; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600; margin-top: 8px;">${isEnglish ? 'Join Class' : 'Rejoindre le cours'}</a>`
+      : item.type === 'product' && item.downloadUrl
+        ? `<a href="${item.downloadUrl}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 6px 16px; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600; margin-top: 8px;">${isEnglish ? 'Access Content' : 'Acceder au contenu'}</a>`
+        : '';
+
+    const typeLabel = item.type === 'event'
+      ? (isEnglish ? 'Class' : 'Cours')
+      : (isEnglish ? 'Material' : 'Support');
+
+    const dateInfo = item.eventDate
+      ? `<br><span style="color: #6e6e80; font-size: 13px;">${item.eventDate}</span>`
+      : '';
+
+    return `
+      <tr>
+        <td style="padding: 16px 0; border-bottom: 1px solid #e8e8ed;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <span style="display: inline-block; background: #eef2ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 6px;">${typeLabel}</span>
+              <p style="margin: 4px 0 0 0; font-size: 15px; font-weight: 600; color: #1a1a2e;">${item.title}</p>
+              ${dateInfo}
+              ${accessLink}
+            </div>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  // Savings line
+  const savingsHtml = discountPercent > 0 ? `
+    <tr>
+      <td style="padding: 10px 0;">
+        <div style="background: #f0fdf4; border-radius: 6px; padding: 12px 16px; border: 1px solid #bbf7d0;">
+          <p style="margin: 0; font-size: 14px; color: #166534; font-weight: 600;">
+            ${isEnglish
+              ? `You saved ${discountPercent}% with multi-subject discount`
+              : `Vous avez economise ${discountPercent}% avec la remise multi-matieres`
+            }
+            ${savings > 0 ? ` (-${savings.toFixed(2)}€)` : ''}
+          </p>
+        </div>
+      </td>
+    </tr>` : '';
+
+  // Recommendations section
+  const recsHtml = recommendations.length > 0 ? `
+    <div style="background: #f5f5f7; border-radius: 8px; padding: 24px; margin: 24px 0 0 0; border: 1px solid #e8e8ed;">
+      <h2 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #1a1a2e;">
+        ${isEnglish ? 'Your Next Classes' : 'Vos prochains cours'}
+      </h2>
+      <p style="margin: 0 0 16px 0; font-size: 14px; color: #48485c;">
+        ${isEnglish
+          ? 'Based on your purchase, you might also be interested in:'
+          : 'Sur la base de votre achat, vous pourriez aussi etre interesse par :'
+        }
+      </p>
+      ${recommendations.map((rec) => `
+        <div style="background: #ffffff; border-radius: 6px; padding: 14px 16px; margin-bottom: 8px; border: 1px solid #e8e8ed;">
+          <a href="${appUrl}/${rec.type === 'event' ? 'e' : 'p'}/${rec.slug}" style="text-decoration: none;">
+            <p style="margin: 0; font-size: 14px; font-weight: 600; color: #1d55ea;">${rec.title}</p>
+            ${rec.price ? `<p style="margin: 4px 0 0 0; font-size: 13px; color: #6e6e80;">${rec.price}€</p>` : ''}
+          </a>
+        </div>
+      `).join('')}
+      <div style="text-align: center; margin-top: 16px;">
+        <a href="${appUrl}/classes${categoryFilter ? `?category=${categoryFilter}` : ''}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+          ${isEnglish ? 'Browse All Classes' : 'Voir tous les cours'}
+        </a>
+      </div>
+    </div>` : `
+    <div style="text-align: center; margin: 24px 0 0 0;">
+      <a href="${appUrl}/classes${categoryFilter ? `?category=${categoryFilter}` : ''}" style="display: inline-block; background-color: #1d55ea; color: #ffffff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        ${isEnglish ? 'Browse More Classes' : 'Decouvrir plus de cours'}
+      </a>
+    </div>`;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f5f5f7;">
+
+  <!-- Header -->
+  <div style="background-color: #1d55ea; padding: 32px 30px; text-align: center;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.3px;">
+      ${isEnglish ? 'Order Confirmed' : 'Commande Confirmee'}
+    </h1>
+  </div>
+
+  <!-- Body -->
+  <div style="background: #ffffff; padding: 36px 30px; border-bottom: 1px solid #e8e8ed;">
+    <p style="font-size: 16px; margin: 0 0 20px 0; color: #1a1a2e;">
+      ${isEnglish ? `Hello ${customerName},` : `Bonjour ${customerName},`}
+    </p>
+
+    <p style="font-size: 15px; color: #48485c; margin: 0 0 24px 0;">
+      ${isEnglish
+        ? `Your order of <strong style="color: #1a1a2e;">${items.length} item${items.length > 1 ? 's' : ''}</strong> has been confirmed. Here is your summary:`
+        : `Votre commande de <strong style="color: #1a1a2e;">${items.length} article${items.length > 1 ? 's' : ''}</strong> est confirmee. Voici votre recapitulatif :`
+      }
+    </p>
+
+    <!-- Items List -->
+    <table style="width: 100%; border-collapse: collapse;">
+      ${itemsHtml}
+      ${savingsHtml}
+      <tr>
+        <td style="padding: 16px 0 0 0;">
+          <p style="margin: 0; font-size: 16px; font-weight: 700; color: #1a1a2e; text-align: right;">
+            ${isEnglish ? 'Total paid' : 'Total paye'}: ${totalPaid.toFixed(2)}€
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Recommendations -->
+    ${recsHtml}
+
+    <!-- Spam Notice -->
+    <div style="background: #f5f5f7; border-radius: 6px; padding: 14px; margin: 24px 0 0 0; text-align: center;">
+      <p style="color: #6e6e80; font-size: 13px; margin: 0;">
+        ${isEnglish
+          ? 'Did not receive this email? Please check your spam folder.'
+          : "Vous n'avez pas recu cet email ? Verifiez votre dossier spam."
+        }
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align: center; padding: 24px; color: #6e6e80; font-size: 12px;">
+    <p style="margin: 0 0 4px 0;">Uniflow</p>
+    <p style="margin: 0;">
+      ${isEnglish
+        ? 'You received this email because you made a purchase.'
+        : 'Vous avez recu cet email suite a votre achat.'
+      }
+    </p>
+  </div>
+</body>
+</html>
+  `;
+
+  const itemsText = items.map((item) => {
+    const access = item.type === 'event' && item.meetingLink
+      ? `  ${isEnglish ? 'Join' : 'Rejoindre'}: ${item.meetingLink}`
+      : item.type === 'product' && item.downloadUrl
+        ? `  ${isEnglish ? 'Access' : 'Acceder'}: ${item.downloadUrl}`
+        : '';
+    return `- ${item.title}${access ? '\n' + access : ''}`;
+  }).join('\n');
+
+  const recsText = recommendations.length > 0
+    ? `\n${isEnglish ? 'Your Next Classes:' : 'Vos prochains cours :'}\n${recommendations.map((r) => `- ${r.title}: ${appUrl}/${r.type === 'event' ? 'e' : 'p'}/${r.slug}`).join('\n')}`
+    : '';
+
+  const textContent = isEnglish
+    ? `Order Confirmed\n\nHello ${customerName},\n\nYour order has been confirmed.\n\nItems:\n${itemsText}\n${discountPercent > 0 ? `\nMulti-subject discount: ${discountPercent}%` : ''}\nTotal: ${totalPaid.toFixed(2)}€${recsText}\n\nBrowse more: ${appUrl}/classes${categoryFilter ? `?category=${categoryFilter}` : ''}\n\nUniflow`
+    : `Commande Confirmee\n\nBonjour ${customerName},\n\nVotre commande est confirmee.\n\nArticles :\n${itemsText}\n${discountPercent > 0 ? `\nRemise multi-matieres : ${discountPercent}%` : ''}\nTotal : ${totalPaid.toFixed(2)}€${recsText}\n\nDecouvrir plus : ${appUrl}/classes${categoryFilter ? `?category=${categoryFilter}` : ''}\n\nUniflow`;
+
+  return { subject, htmlContent, textContent };
+}
+
+/**
  * 24-hour reminder template - professional, no emojis
  */
 export function get24HourReminderTemplate({

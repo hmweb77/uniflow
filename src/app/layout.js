@@ -5,6 +5,8 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { LocaleProvider } from '@/contexts/LocaleContext';
+import { CartProvider } from '@/contexts/CartContext';
+import CartDrawer from '@/components/CartDrawer';
 
 const GA_MEASUREMENT_ID = 'G-PKX0WQ3F6E';
 
@@ -58,7 +60,12 @@ export default function RootLayout({ children }) {
           `}
         </Script>
         <ThemeProvider>
-          <LocaleProvider>{children}</LocaleProvider>
+          <LocaleProvider>
+            <CartProvider>
+              {children}
+              <CartDrawer />
+            </CartProvider>
+          </LocaleProvider>
         </ThemeProvider>
       </body>
     </html>

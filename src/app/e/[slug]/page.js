@@ -4,15 +4,49 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useLocale } from '@/contexts/LocaleContext';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import LocaleToggle from '@/components/ui/LocaleToggle';
 import RegistrationForm from '@/components/RegistrationForm';
+import { useCart } from '@/contexts/CartContext';
 import { cleanDashes } from '@/utils/textCleanup';
 import { renderDescription } from '@/utils/descriptionFormat';
 import { formatEventDate, formatEventTime } from '../../lib/utils';
+
+function EventCountdownWidget({ date, label, locale }) {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const target = date?.toDate ? date.toDate() : new Date(date);
+  if (target <= now) return null;
+
+  const diff = target - now;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  return (
+    <div
+      className="rounded-xl p-4 flex items-center gap-3"
+      style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff' }}
+    >
+      <svg className="w-5 h-5 flex-shrink-0 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+      <div>
+        <p className="text-sm font-semibold">{label || (locale === 'fr' ? 'Examen approche' : 'Exam approaching')}</p>
+        <p className="text-xs opacity-80 font-mono">{days}d {hours}h {minutes}m</p>
+      </div>
+    </div>
+  );
+}
 
 export default function PublicEventPage() {
   const params = useParams();
@@ -24,6 +58,9 @@ export default function PublicEventPage() {
   const [error, setError] = useState('');
   const [showRegistration, setShowRegistration] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const { addItem } = useCart();
+  const [addedToCart, setAddedToCart] = useState(false);
+  const [relatedProducts, setRelatedProducts] = useState([]);
 
 
   useEffect(() => {
@@ -58,6 +95,22 @@ export default function PublicEventPage() {
           };
           setEvent({ ...eventData, tickets: [legacyTicket] });
           setSelectedTicket(legacyTicket);
+        }
+
+        // Fetch related products
+        const relIds = eventData.relatedProductIds || [];
+        if (relIds.length > 0) {
+          const relPromises = relIds.slice(0, 4).map(async (id) => {
+            try {
+              const relDoc = await getDoc(doc(db, 'products', id));
+              if (relDoc.exists() && relDoc.data().status === 'published') {
+                return { id: relDoc.id, ...relDoc.data() };
+              }
+            } catch {}
+            return null;
+          });
+          const related = (await Promise.all(relPromises)).filter(Boolean);
+          setRelatedProducts(related);
         }
       } else {
         setError('Event not found');
@@ -551,7 +604,7 @@ export default function PublicEventPage() {
 
               {/* Not yet selected — prompt (only for upcoming events) */}
               {!registrationClosed && !showRegistration && tickets.length > 0 && (
-                <div className="p-4 pt-0">
+                <div className="p-4 pt-0 space-y-2">
                   <button
                     onClick={() => {
                       if (selectedTicket) setShowRegistration(true);
@@ -575,11 +628,86 @@ export default function PublicEventPage() {
                       ? `${t.eventDetail?.continue || 'Continue'} — ${selectedTicket.price} €`
                       : t.eventDetail?.selectTicket || 'Select a ticket'}
                   </button>
+
+                  {selectedTicket && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        addItem({
+                          id: event.id,
+                          type: 'event',
+                          title: event.title,
+                          price: Number(selectedTicket.price) || 0,
+                          subject: event.subject || '',
+                          bannerUrl: event.bannerUrl || '',
+                          slug: event.slug,
+                          ticketId: selectedTicket.id,
+                          ticketName: selectedTicket.name,
+                        });
+                        setAddedToCart(true);
+                        setTimeout(() => setAddedToCart(false), 2000);
+                      }}
+                      className="w-full btn btn-lg font-medium transition-colors"
+                      style={{
+                        backgroundColor: addedToCart ? '#16a34a' : 'var(--bg-tertiary)',
+                        color: addedToCart ? '#fff' : 'var(--text-secondary)',
+                        border: '1px solid var(--border-default)',
+                      }}
+                    >
+                      {addedToCart
+                        ? (locale === 'fr' ? 'Ajouté au panier' : 'Added to Cart')
+                        : (locale === 'fr' ? 'Ajouter au panier' : 'Add to Cart')}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
+
+        {/* ─── Countdown widget ───────────────────────────── */}
+        {event.countdownDate && (() => {
+          const target = event.countdownDate?.toDate ? event.countdownDate.toDate() : new Date(event.countdownDate);
+          if (target <= new Date()) return null;
+          return (
+            <div className="mt-8">
+              <EventCountdownWidget date={event.countdownDate} label={event.countdownLabel} locale={locale} />
+            </div>
+          );
+        })()}
+
+        {/* ─── Related products ──────────────────────────── */}
+        {relatedProducts.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--text-primary)' }}>
+              {locale === 'fr' ? 'Produits recommandés' : 'Recommended for you'}
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              {relatedProducts.map((rp) => (
+                <a
+                  key={rp.id}
+                  href={`/p/${rp.slug}`}
+                  className="block rounded-xl border overflow-hidden hover:shadow-md transition-shadow"
+                  style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-light)' }}
+                >
+                  <div className="h-24 overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                    {rp.bannerUrl ? (
+                      <img src={rp.bannerUrl} alt={rp.title} className="w-full h-full object-contain" />
+                    ) : (
+                      <div className="w-full h-full" style={{ background: 'linear-gradient(135deg, #2d2d3f, #1a1a2e)' }} />
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <h4 className="text-sm font-semibold line-clamp-2 mb-1" style={{ color: 'var(--text-primary)' }}>{rp.title}</h4>
+                    <p className="text-sm font-medium" style={{ color: 'var(--color-primary-600)' }}>
+                      {rp.price === 0 ? (locale === 'fr' ? 'Gratuit' : 'Free') : `${rp.price} EUR`}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ─── Footer ──────────────────────────────────────── */}
         <div className="mt-16 pb-8 text-center">

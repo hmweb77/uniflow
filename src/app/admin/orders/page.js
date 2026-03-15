@@ -20,6 +20,7 @@ export default function OrdersPage() {
   const [selectedTicketType, setSelectedTicketType] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [selectedTag, setSelectedTag] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
 
@@ -64,6 +65,8 @@ export default function OrdersPage() {
             orderType: 'event',
             eventTitle: event?.title || order.eventTitle || 'Unknown Event',
             eventDate: event?.date,
+            subject: event?.subject || '',
+            tags: event?.tags || [],
           };
         });
 
@@ -80,6 +83,8 @@ export default function OrdersPage() {
           productId: data.productId,
           productTitle: data.productTitle || product.title || 'Unknown Product',
           productType: product.type || 'product',
+          subject: product.subject || '',
+          tags: product.tags || [],
         };
       });
 
@@ -112,6 +117,16 @@ export default function OrdersPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
     return [{ value: 'all', label: 'All orders' }, ...eventOpts, ...productOpts];
   }, [orders, events, products]);
+
+  // Tag filter options
+  const tagOptions = useMemo(() => {
+    const allTags = new Set();
+    orders.forEach((o) => {
+      (o.tags || []).forEach((tag) => allTags.add(tag));
+      if (o.subject) allTags.add(`subject:${o.subject}`);
+    });
+    return Array.from(allTags).sort();
+  }, [orders]);
 
   const ticketTypeOptions = useMemo(() => {
     const fromEvents = new Set(orders.filter((o) => o.orderType === 'event').map((o) => o.ticketName || 'General Admission'));
@@ -150,6 +165,18 @@ export default function OrdersPage() {
         }
         const productTypeLabel = order.productType === 'bundle' ? 'Bundle' : order.productType || 'Product';
         return productTypeLabel === selectedTicketType;
+      });
+    }
+
+    // Tag filter
+    if (selectedTag !== 'all') {
+      result = result.filter((order) => {
+        const orderTags = order.tags || [];
+        // Also match subject:X format
+        if (selectedTag.startsWith('subject:') && order.subject === selectedTag.replace('subject:', '')) {
+          return true;
+        }
+        return orderTags.includes(selectedTag);
       });
     }
 
@@ -207,7 +234,7 @@ export default function OrdersPage() {
     });
 
     return result;
-  }, [orders, searchTerm, filterByEventOrProduct, selectedTicketType, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [orders, searchTerm, filterByEventOrProduct, selectedTicketType, selectedTag, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Pagination
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -219,7 +246,7 @@ export default function OrdersPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterByEventOrProduct, selectedTicketType, dateFrom, dateTo]);
+  }, [searchTerm, filterByEventOrProduct, selectedTicketType, selectedTag, dateFrom, dateTo]);
 
   // Format helpers
   const formatDate = (timestamp) => {
@@ -299,12 +326,13 @@ export default function OrdersPage() {
     setSearchTerm('');
     setFilterByEventOrProduct('all');
     setSelectedTicketType('all');
+    setSelectedTag('all');
     setDateFrom('');
     setDateTo('');
   };
 
   const hasActiveFilters =
-    searchTerm || filterByEventOrProduct !== 'all' || selectedTicketType !== 'all' || dateFrom || dateTo;
+    searchTerm || filterByEventOrProduct !== 'all' || selectedTicketType !== 'all' || selectedTag !== 'all' || dateFrom || dateTo;
 
   // Calculate summary stats for filtered results
   const filteredStats = useMemo(() => {
@@ -441,6 +469,24 @@ export default function OrdersPage() {
               ))}
             </select>
           </div>
+
+          {/* Tag Filter */}
+          {tagOptions.length > 0 && (
+            <div className="w-full lg:w-auto">
+              <select
+                value={selectedTag}
+                onChange={(e) => setSelectedTag(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="all">All tags</option>
+                {tagOptions.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Date Filters and Sort */}

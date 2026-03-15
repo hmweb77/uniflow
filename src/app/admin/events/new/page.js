@@ -36,6 +36,10 @@ export default function NewEventPage() {
     shareImageUrl: '',
     soldOut: false,
     maxTickets: '',
+    subject: '',
+    tags: [],
+    countdownDate: '',
+    countdownLabel: '',
   });
 
   const [tickets, setTickets] = useState([{ ...DEFAULT_TICKET, id: crypto.randomUUID() }]);
@@ -189,6 +193,11 @@ export default function NewEventPage() {
         status: 'active',
         attendeeCount: 0,
         totalRevenue: 0,
+        subject: formData.subject || null,
+        tags: formData.tags || [],
+        countdownDate: formData.countdownDate ? new Date(formData.countdownDate) : null,
+        countdownLabel: formData.countdownLabel.trim(),
+        archived: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -336,6 +345,58 @@ export default function NewEventPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Max tickets (optional)</label>
               <input type="number" min="0" name="maxTickets" value={formData.maxTickets} onChange={(e) => setFormData((prev) => ({ ...prev, maxTickets: e.target.value }))} className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Unlimited" />
+            </div>
+          </div>
+        </section>
+
+        {/* Subject, Tags & Countdown */}
+        <section className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Subject, Tags & Urgency</h2>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <select name="subject" value={formData.subject} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <option value="">No subject</option>
+                  <option value="stats">Statistics & Probability</option>
+                  <option value="accounting">Managerial Accounting</option>
+                  <option value="psychology">Psychology</option>
+                  <option value="law">Law</option>
+                  <option value="computer-skills">Computer Skills</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {['cohort:b1', 'cohort:b2', 'exam:midterm', 'exam:final', 'bundle', 'premium'].map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        const tags = formData.tags.includes(tag) ? formData.tags.filter((t) => t !== tag) : [...formData.tags, tag];
+                        setFormData((prev) => ({ ...prev, tags }));
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        formData.tags.includes(tag)
+                          ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                          : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Countdown Date (urgency banner)</label>
+                <input type="datetime-local" name="countdownDate" value={formData.countdownDate} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Countdown Label</label>
+                <input type="text" name="countdownLabel" value={formData.countdownLabel} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g., Midterm Exam" />
+              </div>
             </div>
           </div>
         </section>
